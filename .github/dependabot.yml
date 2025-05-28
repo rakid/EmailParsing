@@ -9,7 +9,7 @@ updates:
       time: "06:00"
     open-pull-requests-limit: 5
     assignees:
-      - "rakid"  # Replace with your GitHub username
+      - "rakid" # Replace with your GitHub username
     commit-message:
       prefix: "chore"
       prefix-development: "chore"
@@ -17,7 +17,7 @@ updates:
     labels:
       - "dependencies"
       - "python"
-    
+
   # API dependencies
   - package-ecosystem: "pip"
     directory: "/api"
@@ -27,14 +27,14 @@ updates:
       time: "06:00"
     open-pull-requests-limit: 3
     assignees:
-      - "rakid"  # Replace with your GitHub username
+      - "rakid" # Replace with your GitHub username
     commit-message:
       prefix: "chore"
       include: "scope"
     labels:
       - "dependencies"
       - "api"
-    
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -44,7 +44,7 @@ updates:
       time: "06:00"
     open-pull-requests-limit: 3
     assignees:
-      - "rakid"  # Replace with your GitHub username
+      - "rakid" # Replace with your GitHub username
     commit-message:
       prefix: "chore"
       include: "scope"

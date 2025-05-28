@@ -7,16 +7,19 @@ Your Inbox Zen MCP Server is now ready for Vercel Serverless deployment! Here's 
 ### 🔧 Core Configuration Files
 
 1. **`vercel.json`** - Main Vercel configuration
+
    - Defines API routes and build settings
    - Configures serverless function timeouts
    - Sets up CORS headers
 
 2. **`api/index.py`** - Main API entry point
+
    - Wraps your FastAPI webhook app for Vercel
    - Includes serverless optimizations
    - Handles module imports correctly
 
 3. **`api/mcp.py`** - MCP Server HTTP API
+
    - Provides HTTP access to MCP functionality
    - Exposes resources, tools, and prompts via REST
    - Includes error handling and fallbacks
@@ -28,16 +31,19 @@ Your Inbox Zen MCP Server is now ready for Vercel Serverless deployment! Here's 
 ### 🚀 Deployment Tools
 
 5. **`VERCEL_DEPLOYMENT.md`** - Complete deployment guide
+
    - Step-by-step deployment instructions
    - Environment variable configuration
    - Testing and monitoring guidance
 
 6. **`deploy-to-vercel.sh`** - Automated deployment script
+
    - One-click deployment with testing
    - Environment setup assistance
    - Post-deployment verification
 
 7. **`test_vercel_deployment.py`** - Deployment testing script
+
    - Comprehensive endpoint testing
    - Verifies MCP functionality
    - Webhook testing with sample payloads
@@ -50,6 +56,7 @@ Your Inbox Zen MCP Server is now ready for Vercel Serverless deployment! Here's 
 ### ⚡ Performance Optimizations
 
 9. **`api/serverless_utils.py`** - Serverless optimizations
+
    - Cold start reduction techniques
    - Memory usage optimization
    - Result caching for better performance
@@ -90,12 +97,14 @@ python test_vercel_deployment.py https://your-app.vercel.app
 After deployment, your server provides:
 
 ### Webhook & Core API
+
 - `POST /webhook` - Postmark webhook receiver
 - `GET /health` - Application health check
 - `GET /api/stats` - Processing statistics
 - `GET /api/emails/recent` - Recent emails
 
 ### MCP Protocol HTTP API
+
 - `GET /mcp/health` - MCP server status
 - `GET /mcp/resources` - List available resources
 - `POST /mcp/resources/read` - Read resource content
@@ -122,6 +131,7 @@ After deployment, your server provides:
 ## 🔄 Continuous Deployment
 
 The GitHub Actions workflow will automatically:
+
 1. Run tests on every push
 2. Deploy to Vercel on main branch updates
 3. Verify deployment functionality

@@ -8,31 +8,31 @@ The following secrets need to be configured in your GitHub repository settings (
 
 ### 🔑 Core Deployment Secrets
 
-| Secret Name | Description | Required For |
-|-------------|-------------|--------------|
-| `VERCEL_TOKEN` | Vercel personal access token | Vercel deployment |
-| `VERCEL_ORG_ID` | Vercel organization ID | Vercel deployment |
-| `VERCEL_PROJECT_ID` | Vercel project ID | Vercel deployment |
+| Secret Name               | Description                     | Required For       |
+| ------------------------- | ------------------------------- | ------------------ |
+| `VERCEL_TOKEN`            | Vercel personal access token    | Vercel deployment  |
+| `VERCEL_ORG_ID`           | Vercel organization ID          | Vercel deployment  |
+| `VERCEL_PROJECT_ID`       | Vercel project ID               | Vercel deployment  |
 | `POSTMARK_WEBHOOK_SECRET` | Postmark webhook signing secret | Webhook validation |
 
 ### 🔍 Code Quality & Security Secrets
 
-| Secret Name | Description | Required For |
-|-------------|-------------|--------------|
-| `CODECOV_TOKEN` | Codecov upload token | Test coverage reporting |
-| `SONAR_TOKEN` | SonarCloud authentication token | Code quality analysis |
+| Secret Name     | Description                     | Required For            |
+| --------------- | ------------------------------- | ----------------------- |
+| `CODECOV_TOKEN` | Codecov upload token            | Test coverage reporting |
+| `SONAR_TOKEN`   | SonarCloud authentication token | Code quality analysis   |
 
 ### 🐳 Docker Publishing Secrets (Optional)
 
-| Secret Name | Description | Required For |
-|-------------|-------------|--------------|
-| `DOCKER_USERNAME` | Docker Hub username | Docker image publishing |
+| Secret Name       | Description               | Required For            |
+| ----------------- | ------------------------- | ----------------------- |
+| `DOCKER_USERNAME` | Docker Hub username       | Docker image publishing |
 | `DOCKER_PASSWORD` | Docker Hub password/token | Docker image publishing |
 
 ### 🧪 Performance Testing Secrets
 
-| Secret Name | Description | Required For |
-|-------------|-------------|--------------|
+| Secret Name             | Description               | Required For |
+| ----------------------- | ------------------------- | ------------ |
 | `VERCEL_PRODUCTION_URL` | Production deployment URL | Load testing |
 
 ## 🛠️ Setup Instructions
@@ -40,20 +40,22 @@ The following secrets need to be configured in your GitHub repository settings (
 ### Step 1: Vercel Integration
 
 1. **Get Vercel Token**:
+
    ```bash
    # Install Vercel CLI
    npm i -g vercel
-   
+
    # Login and get token
    vercel login
    vercel --token
    ```
 
 2. **Get Organization and Project IDs**:
+
    ```bash
    # In your project directory
    vercel env ls
-   
+
    # Or get from Vercel dashboard:
    # Project Settings > General > Project ID
    # Account Settings > General > Organization ID
@@ -67,6 +69,7 @@ The following secrets need to be configured in your GitHub repository settings (
 ### Step 2: Code Quality Tools
 
 1. **Codecov Setup**:
+
    - Visit [codecov.io](https://codecov.io)
    - Sign in with GitHub
    - Add your repository
@@ -98,25 +101,25 @@ The following secrets need to be configured in your GitHub repository settings (
 
 ### GitHub Actions Workflows
 
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| `deploy-vercel.yml` | Push to main, PRs | Deployment with testing |
-| `code-quality.yml` | Push, PRs, scheduled | Code quality analysis |
-| `dependency-management.yml` | Scheduled weekly | Dependency vulnerability scanning |
-| `performance.yml` | Manual, scheduled | Performance benchmarking |
-| `release.yml` | Tag creation | Automated releases |
+| Workflow                    | Trigger              | Purpose                           |
+| --------------------------- | -------------------- | --------------------------------- |
+| `deploy-vercel.yml`         | Push to main, PRs    | Deployment with testing           |
+| `code-quality.yml`          | Push, PRs, scheduled | Code quality analysis             |
+| `dependency-management.yml` | Scheduled weekly     | Dependency vulnerability scanning |
+| `performance.yml`           | Manual, scheduled    | Performance benchmarking          |
+| `release.yml`               | Tag creation         | Automated releases                |
 
 ### Dependency Management
 
-| File | Purpose |
-|------|---------|
-| `dependabot.yml` | Automated dependency updates |
-| `sonar-project.properties` | SonarCloud configuration |
+| File                       | Purpose                      |
+| -------------------------- | ---------------------------- |
+| `dependabot.yml`           | Automated dependency updates |
+| `sonar-project.properties` | SonarCloud configuration     |
 
 ### Issue Templates
 
-| Template | Purpose |
-|----------|---------|
+| Template         | Purpose                  |
+| ---------------- | ------------------------ |
 | `bug_report.yml` | Structured bug reporting |
 
 ## 🚦 Validation Checklist
@@ -133,6 +136,7 @@ After setting up all secrets, verify the following:
 ## 🔗 Useful Commands
 
 ### Local Development
+
 ```bash
 # Run code quality checks locally
 black --check src/ tests/
@@ -149,6 +153,7 @@ python simple_performance_test.py
 ```
 
 ### Vercel Management
+
 ```bash
 # Deploy to preview
 vercel
@@ -165,14 +170,17 @@ vercel logs
 ### Common Issues
 
 1. **Vercel Deployment Fails**:
+
    - Verify `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` are correct
    - Check if the token has sufficient permissions
 
 2. **Code Quality Workflow Fails**:
+
    - Ensure all dependencies are listed in `requirements.txt`
    - Check Python version compatibility
 
 3. **SonarCloud Analysis Fails**:
+
    - Verify `SONAR_TOKEN` is valid
    - Update organization key in `sonar-project.properties`
 
@@ -196,4 +204,4 @@ vercel logs
 
 ---
 
-*Last updated: May 28, 2025*
+_Last updated: May 28, 2025_

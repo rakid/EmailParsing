@@ -63,16 +63,19 @@ vercel alias <deployment-url> your-domain.com
 Once deployed, your server will be available at:
 
 ### Webhook Endpoints
+
 - `POST /webhook` - Postmark webhook receiver
 - `GET /health` - Health check
 
 ### REST API Endpoints
+
 - `GET /api/emails/recent` - Get recent emails
 - `GET /api/stats` - Get processing statistics
 - `GET /api/analytics` - Get email analytics
 - `GET /api/search` - Search emails
 
 ### MCP API Endpoints
+
 - `GET /mcp/health` - MCP server health
 - `GET /mcp/resources` - List MCP resources
 - `POST /mcp/resources/read` - Read MCP resource
@@ -85,16 +88,16 @@ Once deployed, your server will be available at:
 
 ### Environment Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `POSTMARK_WEBHOOK_SECRET` | Postmark webhook signature secret | None | No* |
-| `ENVIRONMENT` | Environment (development/production) | development | No |
-| `LOG_LEVEL` | Logging level (DEBUG/INFO/WARNING/ERROR) | INFO | No |
-| `LOG_FORMAT` | Log format (text/json) | text | No |
-| `API_KEY_REQUIRED` | Require API key for endpoints | false | No |
-| `VALID_API_KEYS` | Comma-separated API keys | None | If API_KEY_REQUIRED=true |
+| Variable                  | Description                              | Default     | Required                 |
+| ------------------------- | ---------------------------------------- | ----------- | ------------------------ |
+| `POSTMARK_WEBHOOK_SECRET` | Postmark webhook signature secret        | None        | No\*                     |
+| `ENVIRONMENT`             | Environment (development/production)     | development | No                       |
+| `LOG_LEVEL`               | Logging level (DEBUG/INFO/WARNING/ERROR) | INFO        | No                       |
+| `LOG_FORMAT`              | Log format (text/json)                   | text        | No                       |
+| `API_KEY_REQUIRED`        | Require API key for endpoints            | false       | No                       |
+| `VALID_API_KEYS`          | Comma-separated API keys                 | None        | If API_KEY_REQUIRED=true |
 
-*Webhook signature verification is recommended for production
+\*Webhook signature verification is recommended for production
 
 ### Postmark Setup
 
@@ -106,16 +109,19 @@ Once deployed, your server will be available at:
 ## 🧪 Testing Your Deployment
 
 ### Test Health Check
+
 ```bash
 curl https://your-vercel-domain.vercel.app/health
 ```
 
 ### Test MCP Health
+
 ```bash
 curl https://your-vercel-domain.vercel.app/mcp/health
 ```
 
 ### Test Webhook (with test payload)
+
 ```bash
 curl -X POST https://your-vercel-domain.vercel.app/webhook \
   -H "Content-Type: application/json" \
@@ -133,6 +139,7 @@ curl -X POST https://your-vercel-domain.vercel.app/webhook \
 ```
 
 ### Test MCP Tools
+
 ```bash
 # List available tools
 curl https://your-vercel-domain.vercel.app/mcp/tools
@@ -149,11 +156,13 @@ curl -X POST https://your-vercel-domain.vercel.app/mcp/tools/call \
 ## 🔍 Monitoring and Debugging
 
 ### Vercel Dashboard
+
 - View deployment logs in Vercel dashboard
 - Monitor function invocations and errors
 - Check performance metrics
 
 ### Logs Access
+
 ```bash
 # View recent logs
 vercel logs
@@ -180,12 +189,14 @@ vercel logs --follow
 ## 📊 Performance Optimization
 
 ### Serverless Optimization
+
 - Keep function size small
 - Minimize cold start time
 - Use efficient data structures
 - Cache when possible
 
 ### Monitoring
+
 - Use Vercel Analytics
 - Monitor function execution time
 - Track error rates
@@ -203,6 +214,7 @@ Connect your Git repository to Vercel for automatic deployments:
 ## 🆘 Support
 
 For issues:
+
 1. Check Vercel deployment logs
 2. Review function logs in dashboard
 3. Test endpoints individually
