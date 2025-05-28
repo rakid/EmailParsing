@@ -208,3 +208,4 @@ setup_integrations.py
 .Trashes
 ehthumbs.db
 Thumbs.db
+.vercel

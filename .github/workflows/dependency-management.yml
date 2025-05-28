@@ -1,0 +1,105 @@
+name: Dependency Management
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'requirements.txt'
+      - 'api/requirements.txt'
+
+jobs:
+  dependency-check:
+    name: Check Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety pip-audit
+      
+      - name: Check for security vulnerabilities with Safety
+        run: |
+          safety check -r requirements.txt --json --output safety-report.json
+        continue-on-error: true
+      
+      - name: Check for security vulnerabilities with pip-audit
+        run: |
+          pip-audit -r requirements.txt --format=json --output=pip-audit-report.json
+        continue-on-error: true
+      
+      - name: Upload dependency reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-reports
+          path: |
+            safety-report.json
+            pip-audit-report.json
+
+  update-dependencies:
+    name: Update Dependencies (Dependabot Alternative)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install pip-tools
+        run: |
+          python -m pip install --upgrade pip pip-tools
+      
+      - name: Update requirements
+        run: |
+          # Create requirements.in if it doesn't exist
+          if [ ! -f requirements.in ]; then
+            cp requirements.txt requirements.in
+          fi
+          
+          # Update dependencies
+          pip-compile --upgrade requirements.in
+          
+          # Check if there are changes
+          if ! git diff --quiet requirements.txt; then
+            echo "dependencies_updated=true" >> $GITHUB_ENV
+          else
+            echo "dependencies_updated=false" >> $GITHUB_ENV
+          fi
+      
+      - name: Create Pull Request
+        if: env.dependencies_updated == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update dependencies'
+          title: 'chore: update dependencies'
+          body: |
+            ## Dependency Updates
+            
+            This PR updates dependencies to their latest versions.
+            
+            Please review the changes and test thoroughly before merging.
+            
+            **Note**: This PR was created automatically by GitHub Actions.
+          branch: chore/update-dependencies
+          delete-branch: true

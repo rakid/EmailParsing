@@ -491,6 +491,25 @@ async def get_analytics():
         "hourly_distribution": hourly_counts
     }
 
+# Add serverless environment detection and optimizations
+import platform
+
+# Detect if running in Vercel/serverless environment
+SERVERLESS_ENV = os.getenv("VERCEL", "0") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None
+VERCEL_ENV = os.getenv("VERCEL", "0") == "1"
+
+# Optimize for serverless
+if SERVERLESS_ENV:
+    # Reduce startup time
+    config.enable_async_processing = True
+    config.max_processing_time = min(config.max_processing_time, 25)  # Leave buffer for Vercel timeout
+    
+    # Optimize logging for serverless
+    config.log_format = "json"
+    config.enable_console_colors = False
+    
+    print(f"🚀 Running in serverless environment (Vercel: {VERCEL_ENV})")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8081)
