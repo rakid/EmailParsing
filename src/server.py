@@ -4,7 +4,6 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Dict, List
 
 from mcp.server import Server
 from mcp.types import (
@@ -12,28 +11,20 @@ from mcp.types import (
     PromptMessage,
     Resource,
     TextContent,
-    TextResourceContents,
     Tool,
 )
-
-# Add src directory to path for imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from . import storage
 from .config import config
 from .extraction import email_extractor
-from .models import EmailAnalysis, EmailData, EmailStats, ProcessedEmail
+
+# Add src directory to path for imports
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 
 # Import integration capabilities
 try:
-    from .integrations import (
-        AIAnalysisInterface,
-        DatabaseInterface,
-        DataExporter,
-        ExportFormat,
-        PluginInterface,
-        integration_registry,
-    )
+    pass
 
     INTEGRATIONS_AVAILABLE = True
 except ImportError:
@@ -860,7 +851,6 @@ Please provide:
 
 async def main():
     """Main entry point for MCP server over stdio"""
-    import sys
 
     from mcp.server.stdio import stdio_server
 

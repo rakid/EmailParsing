@@ -2,24 +2,25 @@
 import hashlib
 import hmac
 import json
-import logging
 import os
-
-# Add src directory to path for imports
 import sys
+import time
 import uuid
-from datetime import datetime
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import (
+    Dict,
+    Optional,
+)
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from . import storage  # Import module to use same instance as tests
+from . import storage
 from .config import config
 from .extraction import email_extractor
-from .logging_system import log_performance, logger
+from .logging_system import (
+    logger,
+)
 from .models import (
     AttachmentData,
     EmailAnalysis,
@@ -30,6 +31,12 @@ from .models import (
     UrgencyLevel,
 )
 
+# Add src directory to path for imports
+# This line is for ensuring relative imports work from this file's location.
+# It's often better to manage PYTHONPATH or run as a module (python -m src.webhook).
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+
 # Import integration capabilities
 try:
     from .integrations import integration_registry
@@ -37,65 +44,58 @@ try:
     INTEGRATIONS_AVAILABLE = True
 except ImportError:
     INTEGRATIONS_AVAILABLE = False
-    print("⚠️ Integration module not available - running without plugin support")
+    logger.warning("Integration module not available - running without plugin support")
 
-# Set up logging
-logging.basicConfig(level=config.log_level)
-# Note: The comprehensive logging system will handle its own configuration
-
+# FastAPI app initialization
 app = FastAPI(
     title="Inbox Zen Email Processing Webhook",
     description="Receives Postmark inbound webhooks and processes emails",
     version=config.server_version,
-    lifespan=config.lifespan_manager,  # Add lifespan manager
+    lifespan=config.lifespan_manager,
 )
 
-
-@app.get("/health", tags=["Monitoring"])
-async def health_check():
-    """Simple health check endpoint to confirm the server is running."""
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+# --- Webhook Utility Functions ---
 
 
 def verify_webhook_signature(body: bytes, signature: str, secret: str) -> bool:
-    """Verify Postmark webhook signature for security"""
+    """Verify Postmark webhook signature for security."""
     if not secret:
-        logger.warning("No webhook secret configured - skipping signature verification")
+        logger.warning(
+            "No webhook secret configured - skipping signature verification."
+        )
         return True
 
     expected_signature = hmac.new(
         secret.encode("utf-8"), body, hashlib.sha256
     ).hexdigest()
-
     return hmac.compare_digest(signature, expected_signature)
 
 
-def extract_email_data(webhook_payload: PostmarkWebhookPayload) -> EmailData:
-    """Extract EmailData from Postmark webhook payload"""
-
-    # Parse recipient emails
+def extract_email_data(
+    webhook_payload: PostmarkWebhookPayload,
+) -> EmailData:
+    """Extract EmailData from Postmark webhook payload."""
     to_emails = [recipient["Email"] for recipient in webhook_payload.ToFull]
-    cc_emails = []
-    if webhook_payload.CcFull:
-        cc_emails = [recipient["Email"] for recipient in webhook_payload.CcFull]
+    cc_emails = (
+        [recipient["Email"] for recipient in webhook_payload.CcFull]
+        if webhook_payload.CcFull
+        else []
+    )
+    bcc_emails = (
+        [recipient["Email"] for recipient in webhook_payload.BccFull]
+        if webhook_payload.BccFull
+        else []
+    )
 
-    bcc_emails = []
-    if webhook_payload.BccFull:
-        bcc_emails = [recipient["Email"] for recipient in webhook_payload.BccFull]
-
-    # Parse attachments
-    attachments = []
-    for attachment in webhook_payload.Attachments:
-        attachments.append(
-            AttachmentData(
-                name=attachment.get("Name", ""),
-                content_type=attachment.get("ContentType", ""),
-                size=attachment.get("ContentLength", 0),
-                content_id=attachment.get("ContentID"),
-            )
+    attachments = [
+        AttachmentData(
+            name=attachment.get("Name", ""),
+            content_type=attachment.get("ContentType", ""),
+            size=attachment.get("ContentLength", 0),
+            content_id=attachment.get("ContentID"),
         )
-
-    # Parse headers
+        for attachment in webhook_payload.Attachments
+    ]
     headers = {header["Name"]: header["Value"] for header in webhook_payload.Headers}
 
     return EmailData(
@@ -113,461 +113,303 @@ def extract_email_data(webhook_payload: PostmarkWebhookPayload) -> EmailData:
     )
 
 
-@app.post(config.webhook_endpoint)
-async def handle_postmark_webhook(
-    request: Request, x_postmark_signature: Optional[str] = Header(None)
-):
-    """Handle incoming Postmark inbound webhook"""
-    import time
+async def _ensure_webhook_is_authentic(body: bytes, signature: Optional[str]) -> None:
+    """
+    Verify webhook authentication. Raises HTTPException if verification fails.
+    This combines the logic of config.postmark_webhook_secret check and actual verification.
+    """
+    if not config.postmark_webhook_secret:
+        logger.warning(
+            "Webhook secret not configured. Skipping signature verification. This is insecure for production."
+        )
+        # Allow if no secret is configured (e.g., for local dev without Postmark)
+        return
 
-    processing_start_time = time.time()
+    if not signature:
+        logger.log_webhook_validation_error("Missing webhook signature", {})
+        raise HTTPException(status_code=401, detail="Missing webhook signature")
+
+    if not verify_webhook_signature(body, signature, config.postmark_webhook_secret):
+        logger.log_webhook_validation_error("Invalid webhook signature", {})
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+
+def _determine_sentiment(
+    sentiment_indicators: Dict[str, list],
+) -> str:
+    """Determine overall sentiment from extracted indicators."""
+    positive_count = len(sentiment_indicators.get("positive", []))
+    negative_count = len(sentiment_indicators.get("negative", []))
+
+    if positive_count > negative_count:
+        return "positive"
+    elif negative_count > positive_count:
+        return "negative"
+    else:
+        return "neutral"
+
+
+def _create_email_analysis(
+    extracted_metadata,
+    urgency_score: float,
+    urgency_level_str: str,
+    sentiment: str,
+) -> EmailAnalysis:
+    """Create an EmailAnalysis object from extracted data."""
+    return EmailAnalysis(
+        urgency_score=urgency_score,
+        urgency_level=UrgencyLevel(
+            urgency_level_str
+        ),  # Assumes urgency_level_str is a valid UrgencyLevel member
+        sentiment=sentiment,
+        confidence=0.8,  # Base confidence for regex-based analysis
+        keywords=extracted_metadata.priority_keywords[:20],
+        action_items=extracted_metadata.action_words[:10],
+        temporal_references=extracted_metadata.temporal_references[:10],
+        tags=["extracted", urgency_level_str, sentiment],
+        category="email",  # Default category
+    )
+
+
+async def _process_through_plugins(
+    processed_email: ProcessedEmail, processing_id: str
+) -> ProcessedEmail:
+    """Process the email through any registered and available plugins."""
+    if not (INTEGRATIONS_AVAILABLE and integration_registry.plugin_manager.plugins):
+        return processed_email
 
     try:
-        # Get raw body for signature verification
+        logger.info(
+            f"Processing email {processing_id} through {
+                len(
+                    integration_registry.plugin_manager.plugins)} plugins"
+        )
+        enhanced_email = (
+            await integration_registry.plugin_manager.process_email_through_plugins(
+                processed_email
+            )
+        )
+        logger.info(f"Email {processing_id} enhanced by plugins")
+        return enhanced_email
+    except Exception as e:
+        logger.error(
+            f"Plugin processing failed for email {processing_id}: {e}",
+            exc_info=True,
+        )
+        return processed_email  # Return original email if plugin processing fails
+
+
+async def _save_to_database(
+    processed_email: ProcessedEmail, processing_id: str
+) -> None:
+    """Save the processed email to the configured database, if available."""
+    if not INTEGRATIONS_AVAILABLE:
+        return
+
+    # Attempt to get either sqlite or postgresql database interface
+    db_interface = integration_registry.get_database(
+        "sqlite"
+    ) or integration_registry.get_database("postgresql")
+
+    if db_interface:
+        try:
+            await db_interface.store_email(processed_email)
+            logger.info(
+                f"Email {processing_id} saved to database via {
+                    db_interface.__class__.__name__}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Database storage failed for email {processing_id}: {e}",
+                exc_info=True,
+            )
+
+
+def _update_stats(processing_time_taken: float) -> None:
+    """Update global processing statistics."""
+    storage.stats.total_processed += 1
+    storage.stats.last_processed = datetime.now(
+        timezone.utc
+    )  # Use timezone aware datetime
+    storage.stats.processing_times.append(processing_time_taken)
+
+    if storage.stats.total_processed > 0:
+        emails_with_analysis = [
+            email for email in storage.email_storage.values() if email.analysis
+        ]
+        if emails_with_analysis:  # Avoid division by zero
+            total_urgency = sum(
+                email.analysis.urgency_score for email in emails_with_analysis
+            )
+            storage.stats.avg_urgency_score = total_urgency / len(emails_with_analysis)
+        else:
+            storage.stats.avg_urgency_score = 0.0  # Default if no emails have analysis
+
+
+# --- Main Postmark Webhook Endpoint ---
+@app.post(config.webhook_endpoint)
+async def handle_postmark_webhook(
+    request: Request,
+    x_postmark_signature: Optional[str] = Header(None),
+):
+    """Handle incoming Postmark inbound webhook."""
+    processing_start_time = time.time()
+    processing_id: Optional[str] = None
+    body: bytes = b""
+
+    try:
         body = await request.body()
+        await _ensure_webhook_is_authentic(body, x_postmark_signature)
 
-        # Verify webhook signature if secret is configured
-        if config.postmark_webhook_secret:
-            if not x_postmark_signature:
-                logger.log_webhook_validation_error("Missing webhook signature", {})
-                raise HTTPException(status_code=401, detail="Missing webhook signature")
-
-            if not verify_webhook_signature(
-                body, x_postmark_signature, config.postmark_webhook_secret
-            ):
-                logger.log_webhook_validation_error("Invalid webhook signature", {})
-                raise HTTPException(status_code=401, detail="Invalid webhook signature")
-
-        # Parse JSON payload
         payload_data = json.loads(body.decode("utf-8"))
         webhook_payload = PostmarkWebhookPayload(**payload_data)
 
-        # Generate unique processing ID
-        processing_id = str(uuid.uuid4())
+        processing_id = str(
+            uuid.uuid4()
+        )  # Generate unique ID for this processing instance
 
-        # Extract email data
         email_data = extract_email_data(webhook_payload)
+        logger.log_email_received(
+            email_data, webhook_payload.model_dump()
+        )  # Pass dict for logging
 
-        # Log email reception
-        logger.log_email_received(email_data, payload_data)
-
-        # Perform content extraction and analysis
         logger.log_extraction_start(email_data)
         extracted_metadata = email_extractor.extract_from_email(email_data)
 
-        # Calculate urgency score and level
-        urgency_score, urgency_level = email_extractor.calculate_urgency_score(
+        urgency_score, urgency_level_str = email_extractor.calculate_urgency_score(
             extracted_metadata.urgency_indicators
         )
-
-        # Determine sentiment
-        sentiment_indicators = extracted_metadata.sentiment_indicators
-        if len(sentiment_indicators["positive"]) > len(
-            sentiment_indicators["negative"]
-        ):
-            sentiment = "positive"
-        elif len(sentiment_indicators["negative"]) > len(
-            sentiment_indicators["positive"]
-        ):
-            sentiment = "negative"
-        else:
-            sentiment = "neutral"
-
-        # Log extraction completion
+        sentiment = _determine_sentiment(extracted_metadata.sentiment_indicators)
         logger.log_extraction_complete(
             email_data, extracted_metadata, urgency_score, sentiment
         )
 
-        # Create email analysis
-        email_analysis = EmailAnalysis(
-            urgency_score=urgency_score,
-            urgency_level=UrgencyLevel(urgency_level),
-            sentiment=sentiment,
-            confidence=0.8,  # Base confidence for regex-based analysis
-            keywords=extracted_metadata.priority_keywords[:20],  # Limit keywords
-            action_items=extracted_metadata.action_words[:10],  # Limit action items
-            temporal_references=extracted_metadata.temporal_references[:10],
-            tags=["extracted", urgency_level, sentiment],
-            category="email",  # Default category
+        email_analysis = _create_email_analysis(
+            extracted_metadata,
+            urgency_score,
+            urgency_level_str,
+            sentiment,
         )
-
-        # Create processed email entry
         processed_email = ProcessedEmail(
             id=processing_id,
             email_data=email_data,
             analysis=email_analysis,
             status=EmailStatus.ANALYZED,
-            processed_at=datetime.now(),
-            webhook_payload=payload_data,
+            processed_at=datetime.now(timezone.utc),  # Use timezone aware datetime
+            webhook_payload=payload_data,  # Store original payload if needed later
         )
 
-        # Store in global storage
         storage.email_storage[processing_id] = processed_email
 
-        # Process through plugins if available
-        if INTEGRATIONS_AVAILABLE and integration_registry.plugin_manager.plugins:
-            try:
-                logger.info(
-                    f"Processing email {processing_id} through {len(integration_registry.plugin_manager.plugins)} plugins"
-                )
-                enhanced_email = await integration_registry.plugin_manager.process_email_through_plugins(
-                    processed_email
-                )
-                storage.email_storage[processing_id] = enhanced_email
-                processed_email = enhanced_email
-                logger.info(f"Email {processing_id} enhanced by plugins")
-            except Exception as e:
-                logger.error(f"Plugin processing failed for email {processing_id}: {e}")
-                # Continue with original email if plugin processing fails
+        # Enhance email with plugins
+        processed_email = await _process_through_plugins(processed_email, processing_id)
+        storage.email_storage[processing_id] = (
+            processed_email  # Re-store if plugins modified it
+        )
 
-        # Save to database if configured
-        if INTEGRATIONS_AVAILABLE:
-            db_interface = integration_registry.get_database(
-                "sqlite"
-            ) or integration_registry.get_database("postgresql")
-            if db_interface:
-                try:
-                    await db_interface.store_email(processed_email)
-                    logger.info(f"Email {processing_id} saved to database")
-                except Exception as e:
-                    logger.error(
-                        f"Database storage failed for email {processing_id}: {e}"
-                    )
+        await _save_to_database(processed_email, processing_id)
 
-        # Update stats
-        storage.stats.total_processed += 1
-        storage.stats.last_processed = datetime.now()
-        processing_time = time.time() - processing_start_time
-        storage.stats.processing_times.append(processing_time)
-
-        # Calculate average urgency score
-        if storage.stats.total_processed > 0:
-            total_urgency = sum(
-                email.analysis.urgency_score
-                for email in storage.email_storage.values()
-                if email.analysis
-            )
-            storage.stats.avg_urgency_score = total_urgency / len(
-                [email for email in storage.email_storage.values() if email.analysis]
-            )
-
-        # Log successful processing
-        logger.log_email_processed(processed_email, processing_time)
+        processing_time_taken = time.time() - processing_start_time
+        _update_stats(processing_time_taken)
+        logger.log_email_processed(processed_email, processing_time_taken)
 
         return JSONResponse(
             status_code=200,
             content={
                 "status": "success",
                 "processing_id": processing_id,
-                "message": f"Email {email_data.message_id} processed successfully",
+                "message": f"Email {email_data.message_id} processed successfully.",
             },
         )
 
     except json.JSONDecodeError as e:
         logger.log_processing_error(
-            e, {"error_type": "json_decode", "body_length": len(body)}
+            e,
+            {
+                "error_type": "json_decode",
+                "body_preview": body[:200].decode("utf-8", errors="replace"),
+            },
         )
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    except HTTPException:
-        # Re-raise HTTPExceptions (like 401, 404) without modification
+        raise HTTPException(status_code=400, detail="Invalid JSON payload.") from e
+    except (
+        HTTPException
+    ):  # Re-raise HTTPExceptions directly (e.g., from _ensure_webhook_is_authentic)
         raise
-
     except Exception as e:
-        logger.log_processing_error(
-            e, {"processing_id": processing_id if "processing_id" in locals() else None}
-        )
+        context_id = processing_id if processing_id else "N/A"
+        logger.log_processing_error(e, {"processing_id": context_id})
         storage.stats.total_errors += 1
-        raise HTTPException(status_code=500, detail=f"Processing error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"An unexpected error occurred during email processing: {str(e)}",
+        )
 
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
+# --- Health and Basic API Endpoints (specific to this webhook service) ---
+
+
+@app.get("/health", tags=["Monitoring"])
+async def detailed_health_check():
+    """Provides detailed health status of the webhook service."""
     return {
         "status": "healthy",
-        "server": config.server_name,
-        "version": config.server_version,
-        "emails_processed": storage.stats.total_processed,
-        "errors": storage.stats.total_errors,
+        "server_name": config.server_name,
+        "server_version": config.server_version,
+        "emails_processed_in_memory": storage.stats.total_processed,  # Clarify in-memory
+        "errors_logged": storage.stats.total_errors,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
-@app.get("/api/stats")
-async def get_system_stats():
-    """Get detailed system statistics"""
-    logger.log_system_stats(storage.stats)
+# --- API Routes Integration ---
+# Import and include the API routes from the separate module for better modularity
+try:
+    from .api_routes import router as api_router
 
-    # Calculate additional metrics
-    avg_processing_time = 0
-    if storage.stats.processing_times:
-        avg_processing_time = sum(storage.stats.processing_times) / len(
-            storage.stats.processing_times
-        )
+    app.include_router(api_router, prefix="/api", tags=["API"])
+    logger.info("Successfully loaded API routes from api_routes module")
+except ImportError as e:
+    logger.warning(f"Could not load API routes module: {e}")
+    # Continue without API routes if module is not available
 
-    urgency_distribution = {}
-    for email in storage.email_storage.values():
-        if email.analysis:
-            level = email.analysis.urgency_level
-            urgency_distribution[level] = urgency_distribution.get(level, 0) + 1
+# --- Serverless Environment Optimizations & Uvicorn Launch ---
 
-    return {
-        "total_processed": storage.stats.total_processed,
-        "total_errors": storage.stats.total_errors,
-        "avg_urgency_score": round(storage.stats.avg_urgency_score, 2),
-        "avg_processing_time_ms": round(avg_processing_time * 1000, 2),
-        "last_processed": storage.stats.last_processed,
-        "urgency_distribution": urgency_distribution,
-        "processing_times_samples": len(storage.stats.processing_times),
-        "emails_in_storage": len(storage.email_storage),
-    }
-
-
-@app.get("/api/emails/recent")
-async def get_recent_emails(limit: int = 10):
-    """Get recent processed emails for debugging"""
-    recent_emails = list(storage.email_storage.values())[-limit:]
-    return {
-        "count": len(recent_emails),
-        "emails": [
-            {
-                "id": email.id,
-                "message_id": email.email_data.message_id,
-                "from": email.email_data.from_email,
-                "subject": email.email_data.subject,
-                "received_at": email.email_data.received_at,
-                "status": email.status,
-                "analysis": email.analysis.model_dump() if email.analysis else None,
-            }
-            for email in recent_emails
-        ],
-    }
-
-
-# Enhanced API endpoints for comprehensive email access
-@app.get("/api/emails")
-async def get_emails(
-    skip: int = 0,
-    limit: int = 20,
-    urgency_level: Optional[str] = None,
-    sentiment: Optional[str] = None,
-    search: Optional[str] = None,
-):
-    """Get emails with pagination and filtering"""
-    emails = list(storage.email_storage.values())
-
-    # Apply filters
-    if urgency_level:
-        emails = [
-            e
-            for e in emails
-            if e.analysis and e.analysis.urgency_level.value == urgency_level
-        ]
-
-    if sentiment:
-        emails = [e for e in emails if e.analysis and e.analysis.sentiment == sentiment]
-
-    if search:
-        search_lower = search.lower()
-        emails = [
-            e
-            for e in emails
-            if search_lower in e.email_data.subject.lower()
-            or search_lower in (e.email_data.text_body or "").lower()
-        ]
-
-    # Sort by received date (newest first)
-    emails.sort(key=lambda x: x.email_data.received_at, reverse=True)
-
-    # Apply pagination
-    total = len(emails)
-    paginated_emails = emails[skip : skip + limit]
-
-    return {
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-        "emails": [
-            {
-                "id": email.id,
-                "message_id": email.email_data.message_id,
-                "from": email.email_data.from_email,
-                "to": email.email_data.to_emails,
-                "subject": email.email_data.subject,
-                "received_at": email.email_data.received_at,
-                "status": email.status.value,
-                "analysis": email.analysis.model_dump() if email.analysis else None,
-            }
-            for email in paginated_emails
-        ],
-    }
-
-
-@app.get("/api/emails/{email_id}")
-async def get_email(email_id: str):
-    """Get specific email by ID"""
-    if email_id not in storage.email_storage:
-        raise HTTPException(status_code=404, detail="Email not found")
-
-    email = storage.email_storage[email_id]
-    return {
-        "id": email.id,
-        "email_data": email.email_data.model_dump(),
-        "analysis": email.analysis.model_dump() if email.analysis else None,
-        "status": email.status.value,
-        "processed_at": email.processed_at,
-        "webhook_payload": email.webhook_payload,
-    }
-
-
-@app.get("/api/search")
-async def search_emails(q: str, limit: int = 10, include_content: bool = False):
-    """Advanced email search with query string"""
-    query_lower = q.lower()
-    results = []
-
-    for email in storage.email_storage.values():
-        score = 0
-        matches = []
-
-        # Search in subject
-        if query_lower in email.email_data.subject.lower():
-            score += 10
-            matches.append("subject")
-
-        # Search in body
-        if (
-            email.email_data.text_body
-            and query_lower in email.email_data.text_body.lower()
-        ):
-            score += 5
-            matches.append("body")
-
-        # Search in keywords
-        if email.analysis and any(
-            query_lower in kw.lower() for kw in email.analysis.keywords
-        ):
-            score += 3
-            matches.append("keywords")
-
-        # Search in sender
-        if query_lower in email.email_data.from_email.lower():
-            score += 2
-            matches.append("from")
-
-        if score > 0:
-            result = {
-                "id": email.id,
-                "message_id": email.email_data.message_id,
-                "from": email.email_data.from_email,
-                "subject": email.email_data.subject,
-                "received_at": email.email_data.received_at,
-                "score": score,
-                "matches": matches,
-            }
-
-            if email.analysis:
-                result["urgency_score"] = email.analysis.urgency_score
-                result["urgency_level"] = email.analysis.urgency_level.value
-                result["sentiment"] = email.analysis.sentiment
-
-            if include_content:
-                result["text_body"] = email.email_data.text_body
-
-            results.append(result)
-
-    # Sort by score (highest first)
-    results.sort(key=lambda x: x["score"], reverse=True)
-
-    return {"query": q, "total_found": len(results), "results": results[:limit]}
-
-
-@app.get("/api/analytics")
-async def get_analytics():
-    """Get comprehensive analytics about processed emails"""
-    if not storage.email_storage:
-        return {"message": "No emails processed yet"}
-
-    emails_with_analysis = [e for e in storage.email_storage.values() if e.analysis]
-
-    if not emails_with_analysis:
-        return {"message": "No analyzed emails found"}
-
-    # Urgency distribution
-    urgency_dist = {"low": 0, "medium": 0, "high": 0}
-    sentiment_dist = {"positive": 0, "negative": 0, "neutral": 0}
-    urgency_scores = []
-
-    for email in emails_with_analysis:
-        urgency_dist[email.analysis.urgency_level.value] += 1
-        sentiment_dist[email.analysis.sentiment] += 1
-        urgency_scores.append(email.analysis.urgency_score)
-
-    # Time series data (last 24 hours)
-    from datetime import timedelta
-
-    now = datetime.now()
-    hourly_counts = {}
-
-    for i in range(24):
-        hour_start = now - timedelta(hours=i + 1)
-        hour_end = now - timedelta(hours=i)
-        count = sum(
-            1
-            for email in storage.email_storage.values()
-            if hour_start <= email.email_data.received_at <= hour_end
-        )
-        hourly_counts[f"hour_{i}"] = count
-
-    return {
-        "total_emails": len(storage.email_storage),
-        "analyzed_emails": len(emails_with_analysis),
-        "urgency_distribution": urgency_dist,
-        "sentiment_distribution": sentiment_dist,
-        "urgency_stats": {
-            "average": sum(urgency_scores) / len(urgency_scores),
-            "max": max(urgency_scores),
-            "min": min(urgency_scores),
-        },
-        "processing_stats": {
-            "total_processed": storage.stats.total_processed,
-            "total_errors": storage.stats.total_errors,
-            "avg_processing_time_ms": (
-                sum(storage.stats.processing_times)
-                / len(storage.stats.processing_times)
-                * 1000
-                if storage.stats.processing_times
-                else 0
-            ),
-        },
-        "hourly_distribution": hourly_counts,
-    }
-
-
-# Add serverless environment detection and optimizations
-import platform
-
-# Detect if running in Vercel/serverless environment
 SERVERLESS_ENV = (
     os.getenv("VERCEL", "0") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None
 )
 VERCEL_ENV = os.getenv("VERCEL", "0") == "1"
 
-# Optimize for serverless
 if SERVERLESS_ENV:
-    # Reduce startup time
-    config.enable_async_processing = True
+    # Apply serverless-specific configurations
+    logger.info(
+        f"🚀 Running in serverless environment (Vercel: {VERCEL_ENV}). Applying optimizations..."
+    )
+    config.enable_async_processing = True  # Example, may depend on serverless_utils
     config.max_processing_time = min(
-        config.max_processing_time, 25
-    )  # Leave buffer for Vercel timeout
+        config.max_processing_time,
+        25,  # Leave buffer for Vercel's typical max duration
+    )
+    # Logging format might be controlled by environment or Vercel's log drains
+    if config.log_format != "json":  # Prefer JSON logs in serverless if not already set
+        logger.info("Switching log_format to JSON for serverless environment.")
+        config.log_format = "json"
+    if config.enable_console_colors:
+        config.enable_console_colors = (
+            False  # Colors are not useful in most serverless log viewers
+        )
 
-    # Optimize logging for serverless
-    config.log_format = "json"
-    config.enable_console_colors = False
-
-    print(f"🚀 Running in serverless environment (Vercel: {VERCEL_ENV})")
+    logger.setup_logging()  # Re-initialize logger with potentially updated config
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    # Ensure logger uses the latest config, especially if modified by
+    # serverless detection
+    logger.setup_logging()
+    uvicorn.run(
+        app,
+        host="0.0.0.0",  # Standard host for containerized/server environments
+        port=int(
+            os.getenv("PORT", 8081)
+        ),  # Allow port to be set by environment, default 8081
+    )

@@ -4,9 +4,8 @@ Pytest configuration and shared fixtures for unit tests
 
 import asyncio
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
 
 import pytest
 
@@ -91,7 +90,7 @@ Hello,
 Hope you're having a great week! Here are some interesting industry updates:
 
 - New trends in email marketing
-- Best practices for customer engagement  
+- Best practices for customer engagement
 - Upcoming industry conferences
 
 Feel free to read when you have time. No rush on this one.
@@ -148,7 +147,7 @@ Following up on our sprint planning meeting. Here are the action items:
 
 ACTION REQUIRED:
 - Fix the login bug by Wednesday
-- Update the user documentation 
+- Update the user documentation
 - Deploy to staging environment by Friday
 - Review pull requests from last week
 - Schedule client demo for next Tuesday
@@ -249,7 +248,6 @@ P.S. - Also, can you call me at 555-123-4567 when you get this?
 def clean_storage():
     """Clean email storage for testing - must be explicitly used by tests"""
     import storage
-    from models import EmailStats
 
     # Clear global storage
     print(f"CONFTEST: Cleaning storage, current length: {len(storage.email_storage)}")

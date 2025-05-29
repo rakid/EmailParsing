@@ -8,7 +8,7 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class JSONFormatter(logging.Formatter):
@@ -107,7 +107,8 @@ class EmailProcessingLogger:
                 format_string = (
                     "\033[36m%(asctime)s\033[0m - "  # Cyan timestamp
                     "\033[35m%(name)s\033[0m - "  # Magenta logger name
-                    "%(levelname_color)s%(levelname)s\033[0m - "  # Colored level
+                    # Colored level
+                    "%(levelname_color)s%(levelname)s\033[0m - "
                     "%(message)s"
                 )
             else:
@@ -289,9 +290,25 @@ class EmailProcessingLogger:
             extra={"event_type": "performance_metrics", **metrics},
         )
 
-    def log_system_stats(self, stats):
+    def log_system_stats(self, stats=None):
         """Log system statistics"""
-        from storage import stats as storage_stats
+        # Use passed stats parameter if provided (for testing), otherwise import from storage
+        if stats is not None:
+            storage_stats = stats
+        else:
+            try:
+                from src.storage import stats as storage_stats
+            except ImportError:
+                # Fallback for testing environments
+                try:
+                    import storage
+
+                    storage_stats = storage.stats
+                except ImportError:
+                    # Create a default stats object if nothing is available
+                    from src.models import EmailStats
+
+                    storage_stats = EmailStats()
 
         self.logger.info(
             "System statistics",

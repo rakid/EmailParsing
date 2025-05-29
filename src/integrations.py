@@ -6,7 +6,7 @@ including AI analysis modules, database systems, and plugin architecture.
 
 import json
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol, Union
 
@@ -61,7 +61,7 @@ class AIAnalysisFormat(BaseModel):
         """Convert ProcessedEmail to AI analysis format"""
         return cls(
             email_id=email.id,
-            timestamp=email.processed_at or datetime.utcnow(),
+            timestamp=email.processed_at or datetime.now(timezone.utc),
             content={
                 "subject": email.email_data.subject,
                 "text_body": email.email_data.text_body,
@@ -159,32 +159,26 @@ class DatabaseInterface(ABC):
     @abstractmethod
     async def connect(self, connection_string: str) -> None:
         """Establish database connection"""
-        pass
 
     @abstractmethod
     async def store_email(self, email: ProcessedEmail) -> str:
         """Store processed email and return ID"""
-        pass
 
     @abstractmethod
     async def get_email(self, email_id: str) -> Optional[ProcessedEmail]:
         """Retrieve email by ID"""
-        pass
 
     @abstractmethod
     async def search_emails(self, query: Dict[str, Any]) -> List[ProcessedEmail]:
         """Search emails with filters"""
-        pass
 
     @abstractmethod
     async def get_stats(self) -> EmailStats:
         """Get processing statistics"""
-        pass
 
     @abstractmethod
     async def disconnect(self) -> None:
         """Close database connection"""
-        pass
 
 
 class SQLiteInterface(DatabaseInterface):
@@ -198,12 +192,11 @@ class SQLiteInterface(DatabaseInterface):
         """Connect to SQLite database"""
         # Implementation would use aiosqlite
         self.db_path = connection_string
-        # self.connection = await aiosqlite.connect(connection_string)
 
     async def store_email(self, email: ProcessedEmail) -> str:
         """Store email in SQLite"""
         # Convert to database format and insert
-        db_format = DatabaseFormat.from_processed_email(email)
+        DatabaseFormat.from_processed_email(email)
         # Implementation would execute SQL INSERT
         # async with aiosqlite.connect(self.db_path) as db:
         #     await db.execute("INSERT INTO emails (...) VALUES (...)", ...)
@@ -217,7 +210,6 @@ class SQLiteInterface(DatabaseInterface):
         #     cursor = await db.execute("SELECT * FROM emails WHERE id = ?", (email_id,))
         #     result = await cursor.fetchone()
         #     return convert_to_processed_email(result) if result else None
-        pass
 
     async def search_emails(self, query: Dict[str, Any]) -> List[ProcessedEmail]:
         """Search emails in SQLite"""
@@ -244,7 +236,6 @@ class SQLiteInterface(DatabaseInterface):
         # Implementation would close connection
         # if self.connection:
         #     await self.connection.close()
-        pass
 
 
 class PostgreSQLInterface(DatabaseInterface):
@@ -257,11 +248,10 @@ class PostgreSQLInterface(DatabaseInterface):
         """Connect to PostgreSQL"""
         # Implementation would use asyncpg
         # self.connection_pool = await asyncpg.create_pool(connection_string)
-        pass
 
     async def store_email(self, email: ProcessedEmail) -> str:
         """Store email in PostgreSQL"""
-        db_format = DatabaseFormat.from_processed_email(email)
+        DatabaseFormat.from_processed_email(email)
         # Implementation would use asyncpg to insert
         # async with self.connection_pool.acquire() as conn:
         #     await conn.execute("INSERT INTO emails (...) VALUES (...)", ...)
@@ -273,7 +263,6 @@ class PostgreSQLInterface(DatabaseInterface):
         # async with self.connection_pool.acquire() as conn:
         #     result = await conn.fetchrow("SELECT * FROM emails WHERE id = $1", email_id)
         #     return convert_to_processed_email(result) if result else None
-        pass
 
     async def search_emails(self, query: Dict[str, Any]) -> List[ProcessedEmail]:
         """Search emails in PostgreSQL"""
@@ -298,7 +287,6 @@ class PostgreSQLInterface(DatabaseInterface):
         # Implementation would close connection pool
         # if self.connection_pool:
         #     await self.connection_pool.close()
-        pass
 
 
 # ============================================================================
@@ -312,22 +300,18 @@ class AIAnalysisInterface(ABC):
     @abstractmethod
     async def analyze_email(self, email_data: EmailData) -> EmailAnalysis:
         """Analyze email and return analysis results"""
-        pass
 
     @abstractmethod
     async def batch_analyze(self, emails: List[EmailData]) -> List[EmailAnalysis]:
         """Analyze multiple emails in batch"""
-        pass
 
     @abstractmethod
     def get_supported_features(self) -> List[str]:
         """Get list of analysis features this module supports"""
-        pass
 
     @abstractmethod
     async def train_model(self, training_data: List[AIAnalysisFormat]) -> None:
         """Train the analysis model with data"""
-        pass
 
 
 class OpenAIInterface(AIAnalysisInterface):
@@ -381,7 +365,6 @@ class OpenAIInterface(AIAnalysisInterface):
         # Implementation would use OpenAI fine-tuning API
         # For now, just log the training request
         print(f"Training request for {len(training_data)} samples (placeholder)")
-        pass
 
 
 # ============================================================================
@@ -508,7 +491,7 @@ class DataExporter:
         """Export emails as CSV"""
         # Implementation would use pandas or csv module
         # Convert to DatabaseFormat for flat structure
-        db_formats = [DatabaseFormat.from_processed_email(email) for email in emails]
+        [DatabaseFormat.from_processed_email(email) for email in emails]
         # Write CSV using db_formats
         return destination
 
