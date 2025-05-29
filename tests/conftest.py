@@ -1,6 +1,7 @@
 """
 Pytest configuration and shared fixtures for unit tests
 """
+
 import pytest
 import asyncio
 import sys
@@ -9,15 +10,18 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any
 
 # Configure pytest asyncio
-pytest_plugins = ('pytest_asyncio',)
+pytest_plugins = ("pytest_asyncio",)
+
 
 def pytest_configure(config):
     """Configure pytest settings"""
     # Set asyncio event loop scope to function to avoid warnings
     config.option.asyncio_default_fixture_loop_scope = "function"
 
+
 # Add src to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 
 @pytest.fixture
 def sample_email_data():
@@ -25,7 +29,7 @@ def sample_email_data():
     return {
         "message_id": "test-message-123@example.com",
         "from_email": "john.doe@example.com",
-        "to_emails": ["jane.smith@company.com"], 
+        "to_emails": ["jane.smith@company.com"],
         "subject": "URGENT: Project deadline tomorrow - need your input ASAP",
         "text_body": """
 Hi Jane,
@@ -68,10 +72,11 @@ P.S. - Also, can you call me at 555-123-4567 when you get this?
         "cc_emails": [],
         "bcc_emails": [],
         "attachments": [],
-        "headers": {}
+        "headers": {},
     }
 
-@pytest.fixture  
+
+@pytest.fixture
 def sample_low_urgency_email():
     """Low urgency email for testing"""
     return {
@@ -97,8 +102,9 @@ Marketing Team
         "cc_emails": [],
         "bcc_emails": [],
         "attachments": [],
-        "headers": {}
+        "headers": {},
     }
+
 
 @pytest.fixture
 def sample_positive_email():
@@ -122,8 +128,9 @@ CEO
         "cc_emails": [],
         "bcc_emails": [],
         "attachments": [],
-        "headers": {}
+        "headers": {},
     }
+
 
 @pytest.fixture
 def sample_email_with_tasks():
@@ -154,8 +161,9 @@ PM
         "cc_emails": [],
         "bcc_emails": [],
         "attachments": [],
-        "headers": {}
+        "headers": {},
     }
+
 
 @pytest.fixture
 def sample_analysis_data():
@@ -168,15 +176,16 @@ def sample_analysis_data():
         "keywords": ["urgent", "deadline", "ASAP", "stressed", "prioritize"],
         "action_items": [
             "Review the budget proposal by tomorrow 5 PM",
-            "Schedule meeting with stakeholders for Friday", 
+            "Schedule meeting with stakeholders for Friday",
             "Submit final report to management",
-            "Call John at 555-123-4567"
+            "Call John at 555-123-4567",
         ],
         "temporal_references": ["tomorrow", "5 PM", "Friday"],
-        "tags": ["urgent", "project", "deadline", "budget"]
+        "tags": ["urgent", "project", "deadline", "budget"],
     }
 
-@pytest.fixture  
+
+@pytest.fixture
 def sample_postmark_payload():
     """Sample Postmark webhook payload for testing"""
     return {
@@ -229,16 +238,18 @@ P.S. - Also, can you call me at 555-123-4567 when you get this?
         "MessageID": "test-message-123@example.com",
         "Headers": [
             {"Name": "X-Priority", "Value": "1"},
-            {"Name": "X-Mailer", "Value": "Outlook Express 6.00.2900.5512"}
+            {"Name": "X-Mailer", "Value": "Outlook Express 6.00.2900.5512"},
         ],
-        "Attachments": []
+        "Attachments": [],
     }
+
 
 @pytest.fixture
 def clean_storage():
     """Clean email storage for testing - must be explicitly used by tests"""
     import storage
     from models import EmailStats
+
     # Clear global storage
     print(f"CONFTEST: Cleaning storage, current length: {len(storage.email_storage)}")
     storage.email_storage.clear()
@@ -250,14 +261,17 @@ def clean_storage():
     print(f"CONFTEST: Storage cleaned, new length: {len(storage.email_storage)}")
     return storage.email_storage
 
+
 @pytest.fixture
 def sample_email_model():
     """Sample EmailData model for testing"""
     import sys
     from pathlib import Path
+
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-    
+
     from models import EmailData
+
     return EmailData(
         message_id="test-123",
         from_email="test@example.com",
@@ -266,8 +280,9 @@ def sample_email_model():
         text_body="This is a test email",
         html_body="<p>This is a test email</p>",
         received_at=datetime.now(),
-        attachments=[]
+        attachments=[],
     )
+
 
 @pytest.fixture(scope="function")
 def event_loop():
@@ -276,12 +291,13 @@ def event_loop():
     yield loop
     loop.close()
 
+
 @pytest.fixture
 def mock_postmark_webhook():
     """Mock Postmark webhook payload"""
     return {
         "From": "sender@example.com",
-        "To": "recipient@example.com", 
+        "To": "recipient@example.com",
         "Cc": "",
         "Bcc": "",
         "Subject": "Test Email Subject",
@@ -290,8 +306,9 @@ def mock_postmark_webhook():
         "TextBody": "This is a test email with plain text content.",
         "ReplyTo": "noreply@example.com",
         "Date": "2025-05-27T15:30:00.000Z",
-        "MessageID": "b7bc2f4a-e38e-4336-af7d-e87c17c4b0c5"
+        "MessageID": "b7bc2f4a-e38e-4336-af7d-e87c17c4b0c5",
     }
+
 
 @pytest.fixture
 def edge_case_emails():
@@ -309,11 +326,11 @@ def edge_case_emails():
                 "cc_emails": [],
                 "bcc_emails": [],
                 "attachments": [],
-                "headers": {}
-            }
+                "headers": {},
+            },
         },
         {
-            "name": "very_long_content", 
+            "name": "very_long_content",
             "data": {
                 "message_id": "long-456",
                 "from_email": "long@test.com",
@@ -324,23 +341,23 @@ def edge_case_emails():
                 "cc_emails": [],
                 "bcc_emails": [],
                 "attachments": [],
-                "headers": {}
-            }
+                "headers": {},
+            },
         },
         {
             "name": "special_characters",
             "data": {
                 "message_id": "special-789",
                 "from_email": "special@test.com",
-                "to_emails": ["user@test.com"], 
+                "to_emails": ["user@test.com"],
                 "subject": "Spéciål Chåràctërs Tëst 🎉 中文 العربية",
                 "text_body": "Email with émojis 🚀💡 and spëciål chäräctërs ñoño",
                 "received_at": datetime(2025, 5, 27, 12, 0, 0),
                 "cc_emails": [],
                 "bcc_emails": [],
                 "attachments": [],
-                "headers": {}
-            }
+                "headers": {},
+            },
         },
         {
             "name": "malformed_data",
@@ -354,23 +371,16 @@ def edge_case_emails():
                 "cc_emails": [],
                 "bcc_emails": [],
                 "attachments": [],
-                "headers": {}
-            }
-        }
+                "headers": {},
+            },
+        },
     ]
+
 
 # Pytest configuration
 def pytest_configure(config):
     """Configure pytest with custom markers"""
-    config.addinivalue_line(
-        "markers", "unit: mark test as unit test"
-    )
-    config.addinivalue_line(
-        "markers", "integration: mark test as integration test"
-    )
-    config.addinivalue_line(
-        "markers", "slow: mark test as slow running"
-    )
-    config.addinivalue_line(
-        "markers", "edge_case: mark test as edge case scenario"
-    )
+    config.addinivalue_line("markers", "unit: mark test as unit test")
+    config.addinivalue_line("markers", "integration: mark test as integration test")
+    config.addinivalue_line("markers", "slow: mark test as slow running")
+    config.addinivalue_line("markers", "edge_case: mark test as edge case scenario")

@@ -16,6 +16,7 @@ from .models import ProcessedEmail, EmailData, EmailAnalysis, EmailStats
 
 class ExportFormat(str, Enum):
     """Supported data export formats"""
+
     JSON = "json"
     CSV = "csv"
     JSONL = "jsonl"  # JSON Lines for streaming
@@ -26,6 +27,7 @@ class ExportFormat(str, Enum):
 
 class IntegrationType(str, Enum):
     """Types of integrations supported"""
+
     AI_ANALYSIS = "ai_analysis"
     DATABASE = "database"
     WORKFLOW = "workflow"
@@ -38,14 +40,20 @@ class IntegrationType(str, Enum):
 # Data Export Formats for AI Analysis Modules
 # ============================================================================
 
+
 class AIAnalysisFormat(BaseModel):
     """Standardized format for AI analysis modules"""
+
     email_id: str
     timestamp: datetime
     content: Dict[str, Any] = Field(description="Email content optimized for AI")
     metadata: Dict[str, Any] = Field(description="Processing metadata")
-    features: Dict[str, Union[str, int, float, List]] = Field(description="Extracted features")
-    context: Optional[Dict[str, Any]] = Field(default=None, description="Additional context")
+    features: Dict[str, Union[str, int, float, List]] = Field(
+        description="Extracted features"
+    )
+    context: Optional[Dict[str, Any]] = Field(
+        default=None, description="Additional context"
+    )
 
     @classmethod
     def from_processed_email(cls, email: ProcessedEmail) -> "AIAnalysisFormat":
@@ -59,29 +67,34 @@ class AIAnalysisFormat(BaseModel):
                 "html_body": email.email_data.html_body,
                 "from_email": email.email_data.from_email,
                 "to_emails": email.email_data.to_emails,
-                "received_at": email.email_data.received_at.isoformat()
+                "received_at": email.email_data.received_at.isoformat(),
             },
             metadata={
                 "message_id": email.email_data.message_id,
                 "status": email.status.value,
-                "processing_time": getattr(email, 'processing_time', None),
-                "attachments_count": len(email.email_data.attachments)
+                "processing_time": getattr(email, "processing_time", None),
+                "attachments_count": len(email.email_data.attachments),
             },
             features={
                 "urgency_score": email.analysis.urgency_score if email.analysis else 0,
-                "urgency_level": email.analysis.urgency_level.value if email.analysis else "low",
+                "urgency_level": (
+                    email.analysis.urgency_level.value if email.analysis else "low"
+                ),
                 "sentiment": email.analysis.sentiment if email.analysis else "neutral",
                 "confidence": email.analysis.confidence if email.analysis else 0.0,
                 "keywords": email.analysis.keywords if email.analysis else [],
                 "action_items": email.analysis.action_items if email.analysis else [],
-                "temporal_references": email.analysis.temporal_references if email.analysis else [],
-                "tags": email.analysis.tags if email.analysis else []
-            }
+                "temporal_references": (
+                    email.analysis.temporal_references if email.analysis else []
+                ),
+                "tags": email.analysis.tags if email.analysis else [],
+            },
         )
 
 
 class DatabaseFormat(BaseModel):
     """Standardized format for database storage"""
+
     id: str
     message_id: str
     from_email: str
@@ -116,21 +129,28 @@ class DatabaseFormat(BaseModel):
             received_at=email.email_data.received_at,
             processed_at=email.processed_at,
             urgency_score=email.analysis.urgency_score if email.analysis else None,
-            urgency_level=email.analysis.urgency_level.value if email.analysis else None,
+            urgency_level=(
+                email.analysis.urgency_level.value if email.analysis else None
+            ),
             sentiment=email.analysis.sentiment if email.analysis else None,
             confidence=email.analysis.confidence if email.analysis else None,
             keywords=json.dumps(email.analysis.keywords) if email.analysis else None,
-            action_items=json.dumps(email.analysis.action_items) if email.analysis else None,
+            action_items=(
+                json.dumps(email.analysis.action_items) if email.analysis else None
+            ),
             tags=json.dumps(email.analysis.tags) if email.analysis else None,
             status=email.status.value,
             headers=json.dumps(email.email_data.headers),
-            attachments=json.dumps([att.dict() for att in email.email_data.attachments])
+            attachments=json.dumps(
+                [att.dict() for att in email.email_data.attachments]
+            ),
         )
 
 
 # ============================================================================
 # Database Integration Interfaces
 # ============================================================================
+
 
 class DatabaseInterface(ABC):
     """Abstract interface for database integrations"""
@@ -215,6 +235,7 @@ class SQLiteInterface(DatabaseInterface):
         #     result = await cursor.fetchone()
         #     return EmailStats(...)
         from .models import EmailStats
+
         return EmailStats()
 
     async def disconnect(self) -> None:
@@ -268,6 +289,7 @@ class PostgreSQLInterface(DatabaseInterface):
         #     stats_data = await conn.fetchrow("SELECT COUNT(*), AVG(urgency_score) FROM emails")
         #     return EmailStats(...)
         from .models import EmailStats
+
         return EmailStats()
 
     async def disconnect(self) -> None:
@@ -281,6 +303,7 @@ class PostgreSQLInterface(DatabaseInterface):
 # ============================================================================
 # AI Analysis Integration Interface
 # ============================================================================
+
 
 class AIAnalysisInterface(ABC):
     """Abstract interface for AI analysis modules"""
@@ -317,7 +340,7 @@ class OpenAIInterface(AIAnalysisInterface):
         """Analyze email using OpenAI API"""
         # Convert to AI format
         from .models import EmailAnalysis, UrgencyLevel
-        
+
         # Implementation would call OpenAI API
         # For now, return a placeholder analysis
         return EmailAnalysis(
@@ -329,7 +352,7 @@ class OpenAIInterface(AIAnalysisInterface):
             action_items=["Review AI analysis"],
             temporal_references=[],
             tags=["openai_processed"],
-            category="ai_analyzed"
+            category="ai_analyzed",
         )
 
     async def batch_analyze(self, emails: List[EmailData]) -> List[EmailAnalysis]:
@@ -349,7 +372,7 @@ class OpenAIInterface(AIAnalysisInterface):
             "action_item_extraction",
             "category_classification",
             "intent_recognition",
-            "summarization"
+            "summarization",
         ]
 
     async def train_model(self, training_data: List[AIAnalysisFormat]) -> None:
@@ -363,6 +386,7 @@ class OpenAIInterface(AIAnalysisInterface):
 # ============================================================================
 # Plugin Architecture
 # ============================================================================
+
 
 class PluginInterface(Protocol):
     """Protocol for email processing plugins"""
@@ -403,7 +427,7 @@ class PluginManager:
         """Register a plugin with priority (lower = higher priority)"""
         name = plugin.get_name()
         self.plugins[name] = plugin
-        
+
         # Insert in order based on priority
         # Implementation would maintain sorted order
         self.plugin_order.append(name)
@@ -414,10 +438,12 @@ class PluginManager:
             del self.plugins[plugin_name]
             self.plugin_order.remove(plugin_name)
 
-    async def process_email_through_plugins(self, email: ProcessedEmail) -> ProcessedEmail:
+    async def process_email_through_plugins(
+        self, email: ProcessedEmail
+    ) -> ProcessedEmail:
         """Process email through all registered plugins"""
         processed_email = email
-        
+
         for plugin_name in self.plugin_order:
             plugin = self.plugins[plugin_name]
             try:
@@ -425,7 +451,7 @@ class PluginManager:
             except Exception as e:
                 # Log error but continue processing
                 print(f"Plugin {plugin_name} failed: {e}")
-                
+
         return processed_email
 
     def get_plugin_info(self) -> Dict[str, Dict[str, Any]]:
@@ -434,7 +460,7 @@ class PluginManager:
             name: {
                 "name": plugin.get_name(),
                 "version": plugin.get_version(),
-                "dependencies": plugin.get_dependencies()
+                "dependencies": plugin.get_dependencies(),
             }
             for name, plugin in self.plugins.items()
         }
@@ -444,17 +470,16 @@ class PluginManager:
 # Data Export Utilities
 # ============================================================================
 
+
 class DataExporter:
     """Utility class for exporting email data in various formats"""
 
     @staticmethod
     def export_emails(
-        emails: List[ProcessedEmail],
-        format_type: ExportFormat,
-        destination: str
+        emails: List[ProcessedEmail], format_type: ExportFormat, destination: str
     ) -> str:
         """Export emails to specified format and destination"""
-        
+
         if format_type == ExportFormat.JSON:
             return DataExporter._export_json(emails, destination)
         elif format_type == ExportFormat.CSV:
@@ -471,10 +496,10 @@ class DataExporter:
         """Export emails as JSON"""
         ai_formats = [AIAnalysisFormat.from_processed_email(email) for email in emails]
         data = [format_obj.dict() for format_obj in ai_formats]
-        
-        with open(destination, 'w') as f:
+
+        with open(destination, "w") as f:
             json.dump(data, f, indent=2, default=str)
-        
+
         return destination
 
     @staticmethod
@@ -490,11 +515,11 @@ class DataExporter:
     def _export_jsonl(emails: List[ProcessedEmail], destination: str) -> str:
         """Export emails as JSON Lines (streaming format)"""
         ai_formats = [AIAnalysisFormat.from_processed_email(email) for email in emails]
-        
-        with open(destination, 'w') as f:
+
+        with open(destination, "w") as f:
             for format_obj in ai_formats:
-                f.write(json.dumps(format_obj.dict(), default=str) + '\n')
-        
+                f.write(json.dumps(format_obj.dict(), default=str) + "\n")
+
         return destination
 
     @staticmethod
@@ -508,6 +533,7 @@ class DataExporter:
 # ============================================================================
 # Integration Registry
 # ============================================================================
+
 
 class IntegrationRegistry:
     """Registry for managing all integrations"""
@@ -538,7 +564,7 @@ class IntegrationRegistry:
         return {
             "databases": list(self.database_interfaces.keys()),
             "ai_interfaces": list(self.ai_interfaces.keys()),
-            "plugins": list(self.plugin_manager.plugins.keys())
+            "plugins": list(self.plugin_manager.plugins.keys()),
         }
 
 
