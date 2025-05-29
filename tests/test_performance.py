@@ -18,32 +18,31 @@ from typing import List, Dict, Any
 import pytest
 import psutil
 from memory_profiler import profile
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from src.extraction import EmailExtractor
 from src.models import EmailData, PostmarkWebhookPayload
-from src.server import server
-from src.storage import storage
-from src.webhook import process_webhook_data
+from src import server
+from src.storage import email_storage, stats
 
 
 class TestEmailProcessingPerformance:
     """Test email processing performance requirements."""
-    
+
     def setup_method(self):
         """Reset storage and setup test environment."""
-        storage.email_storage.clear()
-        storage.stats.total_processed = 0
-        storage.stats.total_errors = 0
-        storage.stats.avg_urgency_score = 0.0
-        storage.stats.last_processed = None
-        storage.stats.processing_times.clear()
-        
+        email_storage.clear()
+        stats.total_processed = 0
+        stats.total_errors = 0
+        stats.avg_urgency_score = 0.0
+        stats.last_processed = None
+        stats.processing_times.clear()
+
         # Ensure server uses the same storage instance
         import src.server
-        src.server.storage = storage
+        src.server.email_storage = email_storage
         import src.webhook
-        src.webhook.storage = storage
+        src.webhook.email_storage = email_storage
 
     def test_single_email_processing_time(self, benchmark, sample_postmark_payload):
         """Test that single email processing meets <2s requirement."""
@@ -61,18 +60,23 @@ class TestEmailProcessingPerformance:
         )
         
         def process_email():
-            return extractor.extract_from_email(email_data)
-        
+            extracted_metadata = extractor.extract_from_email(email_data)
+            urgency_score, urgency_level = extractor.calculate_urgency_score(
+                extracted_metadata.urgency_indicators
+            )
+            return extracted_metadata, urgency_score, urgency_level
+
         # Benchmark the processing time
         result = benchmark(process_email)
-        
+
         # Verify the processing completed
         assert result is not None
-        assert result.urgency_score > 0
+        extracted_metadata, urgency_score, urgency_level = result
+        assert urgency_score > 0
         
         # Check that benchmark time is under 2 seconds
         # pytest-benchmark will automatically track timing
-        print(f"Email processing completed in: {benchmark.stats.mean:.4f}s")
+        print(f"Email processing completed in: {benchmark.stats['mean']:.4f}s")
 
     def test_batch_email_processing_performance(self, benchmark):
         """Test batch processing of multiple emails."""
@@ -94,30 +98,33 @@ class TestEmailProcessingPerformance:
         def process_batch():
             results = []
             for email in emails:
-                analysis = extractor.extract_from_email(email)
-                results.append(analysis)
+                extracted_metadata = extractor.extract_from_email(email)
+                urgency_score, urgency_level = extractor.calculate_urgency_score(
+                    extracted_metadata.urgency_indicators
+                )
+                results.append((extracted_metadata, urgency_score, urgency_level))
             return results
-        
+
         results = benchmark(process_batch)
-        
+
         # Verify all emails were processed
         assert len(results) == 10
         assert all(r is not None for r in results)
-        
+
         # Check average processing time per email
-        avg_time_per_email = benchmark.stats.mean / 10
+        avg_time_per_email = benchmark.stats['mean'] / 10
         print(f"Average time per email in batch: {avg_time_per_email:.4f}s")
         assert avg_time_per_email < 2.0, f"Average processing time {avg_time_per_email:.4f}s exceeds 2s limit"
 
     def test_mcp_tool_response_time(self, benchmark, sample_email_data):
         """Test MCP tool response times."""
         # Setup storage with test data
-        storage.email_storage["test-001"] = sample_email_data
-        storage.stats.total_processed = 1
+        email_storage["test-001"] = sample_email_data
+        stats.total_processed = 1
         
         async def run_analyze_tool():
             # Simulate MCP tool call
-            result = await server.call_tool("analyze_email", {"email_id": "test-001"})
+            result = await server.handle_call_tool("analyze_email", {"email_id": "test-001"})
             return result
         
         def sync_tool_call():
@@ -129,26 +136,32 @@ class TestEmailProcessingPerformance:
         assert result is not None
         assert "error" not in result
         
-        print(f"MCP tool response time: {benchmark.stats.mean:.4f}s")
+        print(f"MCP tool response time: {benchmark.stats['mean']:.4f}s")
 
     def test_webhook_processing_performance(self, benchmark, sample_postmark_payload):
         """Test webhook processing performance."""
-        def process_webhook():
-            # Convert to JSON and back to simulate real webhook
-            payload_json = json.dumps(sample_postmark_payload)
-            payload_dict = json.loads(payload_json)
+        from fastapi.testclient import TestClient
+        from src.webhook import app
+        
+        # Mock config to disable signature verification for performance testing
+        with patch('src.webhook.config') as mock_config:
+            mock_config.webhook_endpoint = "/webhook"
+            mock_config.postmark_webhook_secret = None  # Disable signature verification
             
-            # Process the webhook
-            result = process_webhook_data(payload_dict)
-            return result
-        
-        result = benchmark(process_webhook)
-        
-        # Verify webhook was processed
-        assert result is not None
-        assert len(storage.email_storage) > 0
-        
-        print(f"Webhook processing time: {benchmark.stats.mean:.4f}s")
+            def process_webhook():
+                # Create test client and process webhook
+                client = TestClient(app)
+                response = client.post("/webhook", json=sample_postmark_payload)
+                return response
+            
+            result = benchmark(process_webhook)
+            
+            # Verify webhook was processed
+            assert result is not None
+            assert result.status_code == 200
+            assert len(email_storage) > 0
+            
+            print(f"Webhook processing time: {benchmark.stats['mean']:.4f}s")
 
 
 class TestConcurrentProcessing:
@@ -156,18 +169,18 @@ class TestConcurrentProcessing:
     
     def setup_method(self):
         """Reset storage and setup test environment."""
-        storage.email_storage.clear()
-        storage.stats.total_processed = 0
-        storage.stats.total_errors = 0
-        storage.stats.avg_urgency_score = 0.0
-        storage.stats.last_processed = None
-        storage.stats.processing_times.clear()
+        email_storage.clear()
+        stats.total_processed = 0
+        stats.total_errors = 0
+        stats.avg_urgency_score = 0.0
+        stats.last_processed = None
+        stats.processing_times.clear()
         
         # Ensure consistent storage
         import src.server
-        src.server.storage = storage
+        src.server.email_storage = email_storage
         import src.webhook
-        src.webhook.storage = storage
+        src.webhook.email_storage = email_storage
 
     def test_concurrent_webhook_processing(self):
         """Test concurrent webhook processing with multiple threads."""
@@ -189,18 +202,21 @@ class TestConcurrentProcessing:
                 )
                 
                 start_time = time.time()
-                analysis = extractor.extract_from_email(email_data)
+                extracted_metadata = extractor.extract_from_email(email_data)
+                urgency_score, urgency_level = extractor.calculate_urgency_score(
+                    extracted_metadata.urgency_indicators
+                )
                 processing_time = time.time() - start_time
-                
+
                 # Store in shared storage (testing thread safety)
                 email_id = f"thread-{thread_id}-{i}"
-                storage.email_storage[email_id] = email_data
-                
+                email_storage[email_id] = email_data
+
                 results.append({
                     "thread_id": thread_id,
                     "email_id": email_id,
                     "processing_time": processing_time,
-                    "urgency_score": analysis.urgency_score
+                    "urgency_score": urgency_score
                 })
             
             return results
@@ -219,7 +235,7 @@ class TestConcurrentProcessing:
         # Verify results
         expected_total_emails = num_threads * emails_per_thread
         assert len(all_results) == expected_total_emails
-        assert len(storage.email_storage) == expected_total_emails
+        assert len(email_storage) == expected_total_emails
         
         # Check processing times
         max_processing_time = max(r["processing_time"] for r in all_results)
@@ -248,14 +264,14 @@ class TestConcurrentProcessing:
                 message_id=f"concurrent-test-{i}",
                 received_at="2025-05-28T10:30:00Z"
             )
-            storage.email_storage[f"test-{i:03d}"] = email_data
+            email_storage[f"test-{i:03d}"] = email_data
         
-        storage.stats.total_processed = 10
+        stats.total_processed = 10
         
         async def call_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
             """Call MCP tool."""
             try:
-                result = await server.call_tool(tool_name, params)
+                result = await server.handle_call_tool(tool_name, params)
                 return {"success": True, "result": result}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -300,12 +316,12 @@ class TestMemoryUsage:
     
     def setup_method(self):
         """Reset storage and setup test environment."""
-        storage.email_storage.clear()
-        storage.stats.total_processed = 0
-        storage.stats.total_errors = 0
-        storage.stats.avg_urgency_score = 0.0
-        storage.stats.last_processed = None
-        storage.stats.processing_times.clear()
+        email_storage.clear()
+        stats.total_processed = 0
+        stats.total_errors = 0
+        stats.avg_urgency_score = 0.0
+        stats.last_processed = None
+        stats.processing_times.clear()
         
         # Force garbage collection
         gc.collect()
@@ -332,10 +348,10 @@ class TestMemoryUsage:
             )
             
             # Process email
-            analysis = extractor.extract_from_email(email_data)
+            extracted_metadata = extractor.extract_from_email(email_data)
             
             # Store in storage
-            storage.email_storage[f"memory-test-{i:04d}"] = email_data
+            email_storage[f"memory-test-{i:04d}"] = email_data
             
             # Sample memory every 10 emails
             if i % 10 == 0:
@@ -375,18 +391,18 @@ class TestMemoryUsage:
                 received_at="2025-05-28T10:30:00Z"
             )
             
-            analysis = extractor.extract_from_email(email_data)
-            storage.email_storage[f"cleanup-test-{i:04d}"] = email_data
+            extracted_metadata = extractor.extract_from_email(email_data)
+            email_storage[f"cleanup-test-{i:04d}"] = email_data
         
         memory_before_cleanup = process.memory_info().rss / 1024 / 1024  # MB
         
         # Clear storage
-        storage.email_storage.clear()
-        storage.stats.total_processed = 0
-        storage.stats.total_errors = 0
-        storage.stats.avg_urgency_score = 0.0
-        storage.stats.last_processed = None
-        storage.stats.processing_times.clear()
+        email_storage.clear()
+        stats.total_processed = 0
+        stats.total_errors = 0
+        stats.avg_urgency_score = 0.0
+        stats.last_processed = None
+        stats.processing_times.clear()
         
         # Force garbage collection
         gc.collect()
@@ -401,8 +417,8 @@ class TestMemoryUsage:
         print(f"  Storage items cleared: 50 emails")
         
         # Verify cleanup was effective
-        assert len(storage.email_storage) == 0, "Storage was not properly cleared"
-        assert storage.stats.total_processed == 0, "Stats were not properly reset"
+        assert len(email_storage) == 0, "Storage was not properly cleared"
+        assert stats.total_processed == 0, "Stats were not properly reset"
 
 
 class TestScalabilityLimits:
@@ -410,12 +426,12 @@ class TestScalabilityLimits:
     
     def setup_method(self):
         """Reset storage and setup test environment."""
-        storage.email_storage.clear()
-        storage.stats.total_processed = 0
-        storage.stats.total_errors = 0
-        storage.stats.avg_urgency_score = 0.0
-        storage.stats.last_processed = None
-        storage.stats.processing_times.clear()
+        email_storage.clear()
+        stats.total_processed = 0
+        stats.total_errors = 0
+        stats.avg_urgency_score = 0.0
+        stats.last_processed = None
+        stats.processing_times.clear()
 
     def test_large_email_content_handling(self):
         """Test processing of very large email content."""
@@ -435,17 +451,20 @@ class TestScalabilityLimits:
         )
         
         start_time = time.time()
-        analysis = extractor.extract_from_email(email_data)
+        extracted_metadata = extractor.extract_from_email(email_data)
+        urgency_score, urgency_level = extractor.calculate_urgency_score(
+            extracted_metadata.urgency_indicators
+        )
         processing_time = time.time() - start_time
-        
+
         print(f"Large content processing:")
         print(f"  Content size: ~{len(large_content)} characters")
         print(f"  Processing time: {processing_time:.4f}s")
-        print(f"  Urgency score: {analysis.urgency_score}")
+        print(f"  Urgency score: {urgency_score}")
         
         # Verify processing completed within time limit
         assert processing_time < 2.0, f"Large content processing time {processing_time:.4f}s exceeds 2s limit"
-        assert analysis is not None, "Analysis failed for large content"
+        assert extracted_metadata is not None, "Analysis failed for large content"
 
     def test_storage_capacity_limits(self):
         """Test storage behavior with many emails."""
@@ -467,20 +486,20 @@ class TestScalabilityLimits:
             )
             
             # Process and store
-            analysis = extractor.extract_from_email(email_data)
-            storage.email_storage[f"capacity-test-{i:05d}"] = email_data
+            extracted_metadata = extractor.extract_from_email(email_data)
+            email_storage[f"capacity-test-{i:05d}"] = email_data
         
         total_time = time.time() - start_time
         avg_time_per_email = total_time / num_emails
         
         print(f"Storage capacity test:")
-        print(f"  Emails stored: {len(storage.email_storage)}")
+        print(f"  Emails stored: {len(email_storage)}")
         print(f"  Total time: {total_time:.4f}s")
         print(f"  Average time per email: {avg_time_per_email:.4f}s")
         print(f"  Emails per second: {num_emails / total_time:.2f}")
         
         # Verify storage integrity
-        assert len(storage.email_storage) == num_emails, "Not all emails were stored"
+        assert len(email_storage) == num_emails, "Not all emails were stored"
         assert avg_time_per_email < 0.1, f"Average processing time {avg_time_per_email:.4f}s is too high for capacity test"
         
         # Test retrieval performance
@@ -488,7 +507,7 @@ class TestScalabilityLimits:
         retrieved_emails = 0
         for i in range(0, num_emails, 10):  # Sample every 10th email
             email_id = f"capacity-test-{i:05d}"
-            if email_id in storage.email_storage:
+            if email_id in email_storage:
                 retrieved_emails += 1
         
         retrieval_time = time.time() - retrieval_start

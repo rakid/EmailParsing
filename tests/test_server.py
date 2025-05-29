@@ -310,14 +310,17 @@ class TestToolHandling:
         tools = await server.handle_list_tools()
         
         assert isinstance(tools, list)
-        assert len(tools) == 4  # Expected number of tools
+        assert len(tools) == 7  # Expected number of tools
         
         tool_names = [tool.name for tool in tools]
         expected_tools = [
             "analyze_email",
-            "search_emails",
+            "search_emails", 
             "get_email_stats",
-            "extract_tasks"
+            "extract_tasks",
+            "export_emails",
+            "list_integrations",
+            "process_through_plugins"
         ]
         
         for tool_name in expected_tools:
@@ -632,7 +635,7 @@ class TestServerIntegration:
         
         # Test tool listing
         tools = await server.handle_list_tools()
-        assert len(tools) == 4
+        assert len(tools) == 7
         
         # Test reading processed emails
         result = await server.handle_read_resource("email://processed")
