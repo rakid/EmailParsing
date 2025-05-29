@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Debug script to understand storage isolation in test environment"""
 
-import sys
-from pathlib import Path
 import asyncio
 import json
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add src to Python path (exactly like tests do)
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -15,7 +15,7 @@ print("=== Storage Isolation Debug ===")
 # Import in same order as test_server.py
 print("1. Importing test modules...")
 from src import server, storage
-from src.models import ProcessedEmail, EmailData, EmailAnalysis, EmailStatus
+from src.models import EmailAnalysis, EmailData, EmailStatus, ProcessedEmail
 
 print(f"   server module: {server}")
 print(f"   storage module: {storage}")

@@ -1,10 +1,12 @@
 # Configuration for MCP Email Parsing Server
-import os
 import asyncio  # Ensure asyncio is imported
-from pydantic_settings import BaseSettings
-from typing import Optional, AsyncGenerator
+import os
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional
+
 from fastapi import FastAPI  # Import FastAPI
+from pydantic_settings import BaseSettings
+
 from src.logging_system import logger  # Import logger
 
 # For graceful shutdown

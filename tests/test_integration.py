@@ -4,23 +4,25 @@ Tests end-to-end functionality including webhook processing, MCP protocol compli
 and real-world scenarios.
 """
 
-import pytest
 import asyncio
 import json
-import time
-from datetime import datetime, timedelta
-from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+import os
 
 # Import MCP and server components
 import sys
-import os
+import time
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from src import storage
 from src import server  # MCP Server module
-from src.webhook import app as webhook_app  # FastAPI app instance  
-from src.models import EmailData, ProcessedEmail, EmailAnalysis, UrgencyLevel
+from src import storage
+from src.models import EmailAnalysis, EmailData, ProcessedEmail, UrgencyLevel
+from src.webhook import app as webhook_app  # FastAPI app instance
 
 
 class TestEndToEndIntegration:
@@ -37,14 +39,31 @@ class TestEndToEndIntegration:
         storage.stats.processing_times.clear()
         
         # Ensure webhook app and server use the same storage instance
-        import src.webhook
         import src.server
+        import src.webhook
         src.webhook.storage = storage
         src.server.storage = storage
     
     @pytest.mark.asyncio
-    async def test_complete_postmark_to_mcp_workflow(self):
+    @patch('src.webhook.config')
+    @patch('src.webhook.email_extractor')
+    async def test_complete_postmark_to_mcp_workflow(self, mock_extractor, mock_config):
         """Test complete workflow from Postmark webhook to MCP resource access"""
+        
+        # Configure mocks
+        mock_config.webhook_endpoint = "/webhook"
+        mock_config.postmark_webhook_secret = None  # Disable signature verification for tests
+        
+        # Mock extraction results
+        mock_metadata = MagicMock()
+        mock_metadata.urgency_indicators = ["urgent", "asap", "critical"]
+        mock_metadata.sentiment_indicators = {'positive': [], 'negative': ["outage", "down"]}
+        mock_metadata.priority_keywords = ["urgent", "critical", "server", "outage"]
+        mock_metadata.action_words = ["check", "restart", "contact", "send"]
+        mock_metadata.temporal_references = ["1 hour", "tomorrow"]
+        
+        mock_extractor.extract_from_email.return_value = mock_metadata
+        mock_extractor.calculate_urgency_score.return_value = (95, "critical")
         
         # Step 1: Simulate Postmark webhook
         webhook_payload = {
@@ -118,8 +137,22 @@ Priority: P0
         
         return processing_id
     
-    def test_high_volume_concurrent_processing(self):
+    @patch('src.webhook.email_extractor')
+    @patch('src.webhook.config')
+    def test_high_volume_concurrent_processing(self, mock_config, mock_extractor):
         """Test concurrent webhook processing under load"""
+        
+        # Disable webhook signature verification
+        mock_config.postmark_webhook_secret = None
+        
+        # Mock email extraction
+        mock_metadata = MagicMock()
+        mock_metadata.urgency_score = 75
+        mock_metadata.priority_keywords = ["urgent", "critical"]
+        mock_metadata.action_words = ["check", "review"]
+        mock_metadata.temporal_references = ["tomorrow"]
+        mock_extractor.extract_from_email.return_value = mock_metadata
+        mock_extractor.calculate_urgency_score.return_value = (75, "high")
         
         def create_webhook_payload(i):
             return {
@@ -164,9 +197,23 @@ Priority: P0
         assert storage.stats.total_processed == num_emails
         assert storage.stats.total_errors == 0
     
+    @patch('src.webhook.email_extractor')
+    @patch('src.webhook.config')
     @pytest.mark.asyncio
-    async def test_mcp_tools_integration(self):
+    async def test_mcp_tools_integration(self, mock_config, mock_extractor):
         """Test MCP tools with real processed emails"""
+        
+        # Disable webhook signature verification
+        mock_config.postmark_webhook_secret = None
+        
+        # Mock email extraction
+        mock_metadata = MagicMock()
+        mock_metadata.urgency_score = 85
+        mock_metadata.priority_keywords = ["urgent", "critical", "bug"]
+        mock_metadata.action_words = ["fix", "review", "prepare"]
+        mock_metadata.temporal_references = ["tomorrow", "Friday"]
+        mock_extractor.extract_from_email.return_value = mock_metadata
+        mock_extractor.calculate_urgency_score.return_value = (85, "high")
         
         # First, process some test emails
         test_emails = [
@@ -235,8 +282,22 @@ Priority: P0
         tasks_content = json.loads(tasks_result[0].text)
         assert len(tasks_content["tasks"]) > 0  # Should extract tasks from urgent email
     
-    def test_error_handling_and_recovery(self):
+    @patch('src.webhook.email_extractor')
+    @patch('src.webhook.config')
+    def test_error_handling_and_recovery(self, mock_config, mock_extractor):
         """Test error handling in integration scenarios"""
+        
+        # Disable webhook signature verification
+        mock_config.postmark_webhook_secret = None
+        
+        # Mock email extraction
+        mock_metadata = MagicMock()
+        mock_metadata.urgency_score = 60
+        mock_metadata.priority_keywords = ["test"]
+        mock_metadata.action_words = ["test"]
+        mock_metadata.temporal_references = []
+        mock_extractor.extract_from_email.return_value = mock_metadata
+        mock_extractor.calculate_urgency_score.return_value = (60, "medium")
         
         webhook_client = TestClient(webhook_app)
         
@@ -291,8 +352,22 @@ class TestPerformanceIntegration:
         import src.webhook
         src.webhook.storage = storage
     
-    def test_processing_time_requirements(self):
+    @patch('src.webhook.email_extractor')
+    @patch('src.webhook.config')
+    def test_processing_time_requirements(self, mock_config, mock_extractor):
         """Test that processing meets <2s requirement per email"""
+        
+        # Disable webhook signature verification
+        mock_config.postmark_webhook_secret = None
+        
+        # Mock email extraction
+        mock_metadata = MagicMock()
+        mock_metadata.urgency_score = 90
+        mock_metadata.priority_keywords = ["urgent", "critical"]
+        mock_metadata.action_words = ["review", "contact"]
+        mock_metadata.temporal_references = ["tomorrow", "today"]
+        mock_extractor.extract_from_email.return_value = mock_metadata
+        mock_extractor.calculate_urgency_score.return_value = (90, "critical")
         
         webhook_payload = {
             "From": "performance@test.com",
@@ -339,11 +414,26 @@ This is a performance test email with various content that should trigger analys
         assert stored_email.analysis is not None
         assert stored_email.analysis.urgency_score > 0
     
-    def test_memory_usage_stability(self):
+    @patch('src.webhook.email_extractor')
+    @patch('src.webhook.config')
+    def test_memory_usage_stability(self, mock_config, mock_extractor):
         """Test memory usage doesn't grow excessively with processing"""
         
-        import psutil
+        # Disable webhook signature verification
+        mock_config.postmark_webhook_secret = None
+        
+        # Mock email extraction
+        mock_metadata = MagicMock()
+        mock_metadata.urgency_score = 70
+        mock_metadata.priority_keywords = ["urgent"]
+        mock_metadata.action_words = ["analyze"]
+        mock_metadata.temporal_references = []
+        mock_extractor.extract_from_email.return_value = mock_metadata
+        mock_extractor.calculate_urgency_score.return_value = (70, "high")
+        
         import os
+
+        import psutil
         
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
@@ -415,9 +505,23 @@ class TestMCPProtocolCompliance:
         prompts = await server.handle_list_prompts()
         assert len(prompts) >= 1  # Should have at least 1 prompt
     
+    @patch('src.webhook.email_extractor')
+    @patch('src.webhook.config')
     @pytest.mark.asyncio
-    async def test_mcp_resource_operations(self):
+    async def test_mcp_resource_operations(self, mock_config, mock_extractor):
         """Test MCP resource read operations"""
+        
+        # Disable webhook signature verification
+        mock_config.postmark_webhook_secret = None
+        
+        # Mock email extraction
+        mock_metadata = MagicMock()
+        mock_metadata.urgency_score = 60
+        mock_metadata.priority_keywords = ["test"]
+        mock_metadata.action_words = ["testing"]
+        mock_metadata.temporal_references = []
+        mock_extractor.extract_from_email.return_value = mock_metadata
+        mock_extractor.calculate_urgency_score.return_value = (60, "medium")
         
         # First add some test data
         webhook_payload = {

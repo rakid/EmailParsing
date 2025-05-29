@@ -1,10 +1,18 @@
 """Unit tests for storage.py - Email Storage System"""
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from src import storage
-from src.models import ProcessedEmail, EmailData, EmailAnalysis, EmailStatus, UrgencyLevel, EmailStats
+from src.models import (
+    EmailAnalysis,
+    EmailData,
+    EmailStats,
+    EmailStatus,
+    ProcessedEmail,
+    UrgencyLevel,
+)
 
 
 class TestEmailStorage:
@@ -406,7 +414,7 @@ class TestStorageIntegration:
     def test_storage_memory_usage(self, sample_email_data):
         """Test storage behavior with many emails (memory usage)"""
         import sys
-        
+
         # Store a moderate number of emails to test memory behavior
         num_emails = 100
         

@@ -1,12 +1,19 @@
 """Unit tests for models.py - Email Data Models"""
 
-import pytest
 from datetime import datetime
+
+import pytest
 from pydantic import ValidationError
 
 from src.models import (
-    UrgencyLevel, EmailStatus, AttachmentData, EmailData, 
-    EmailAnalysis, ProcessedEmail, EmailStats, PostmarkWebhookPayload
+    AttachmentData,
+    EmailAnalysis,
+    EmailData,
+    EmailStats,
+    EmailStatus,
+    PostmarkWebhookPayload,
+    ProcessedEmail,
+    UrgencyLevel,
 )
 
 

@@ -1,37 +1,38 @@
 # MCP Email Parsing Server - Foundation
-from mcp.server import Server
-from mcp.types import (
-    Resource,
-    Tool,
-    Prompt,
-    TextResourceContents,
-    PromptMessage,
-    TextContent,
-)
 import asyncio
 import json
-import sys
 import os
+import sys
 from datetime import datetime
 from typing import Dict, List
+
+from mcp.server import Server
+from mcp.types import (
+    Prompt,
+    PromptMessage,
+    Resource,
+    TextContent,
+    TextResourceContents,
+    Tool,
+)
 
 # Add src directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from .models import ProcessedEmail, EmailStats, EmailData, EmailAnalysis
-from .config import config
 from . import storage
+from .config import config
 from .extraction import email_extractor
+from .models import EmailAnalysis, EmailData, EmailStats, ProcessedEmail
 
 # Import integration capabilities
 try:
     from .integrations import (
-        integration_registry,
-        ExportFormat,
-        DataExporter,
-        DatabaseInterface,
         AIAnalysisInterface,
+        DatabaseInterface,
+        DataExporter,
+        ExportFormat,
         PluginInterface,
+        integration_registry,
     )
 
     INTEGRATIONS_AVAILABLE = True
@@ -452,8 +453,9 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                     ]
 
                 # Create temporary EmailData for analysis
-                from models import EmailData
                 from datetime import datetime
+
+                from models import EmailData
 
                 temp_email = EmailData(
                     message_id="temp-analysis",
@@ -859,6 +861,7 @@ Please provide:
 async def main():
     """Main entry point for MCP server over stdio"""
     import sys
+
     from mcp.server.stdio import stdio_server
 
     async with stdio_server() as (read_stream, write_stream):

@@ -1,33 +1,34 @@
 # Postmark Webhook Handler for Email Processing
-from fastapi import FastAPI, HTTPException, Header, Request
-from fastapi.responses import JSONResponse
 import hashlib
 import hmac
 import json
-import uuid
-from datetime import datetime
-from typing import Optional, Dict, Any
 import logging
+import os
 
 # Add src directory to path for imports
 import sys
-import os
+import uuid
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from . import storage  # Import module to use same instance as tests
+from .config import config
+from .extraction import email_extractor
+from .logging_system import log_performance, logger
 from .models import (
-    PostmarkWebhookPayload,
-    EmailData,
-    ProcessedEmail,
-    EmailStatus,
     AttachmentData,
     EmailAnalysis,
+    EmailData,
+    EmailStatus,
+    PostmarkWebhookPayload,
+    ProcessedEmail,
     UrgencyLevel,
 )
-from .config import config
-from . import storage  # Import module to use same instance as tests
-from .extraction import email_extractor
-from .logging_system import logger, log_performance
 
 # Import integration capabilities
 try:

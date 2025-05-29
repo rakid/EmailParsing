@@ -11,18 +11,19 @@ Tests verify that the server meets performance requirements:
 import asyncio
 import gc
 import json
-import time
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Any
-import pytest
-import psutil
-from memory_profiler import profile
+from typing import Any, Dict, List
 from unittest.mock import Mock, patch
 
+import psutil
+import pytest
+from memory_profiler import profile
+
+from src import server
 from src.extraction import EmailExtractor
 from src.models import EmailData, PostmarkWebhookPayload
-from src import server
 from src.storage import email_storage, stats
 
 
@@ -141,8 +142,9 @@ class TestEmailProcessingPerformance:
     def test_webhook_processing_performance(self, benchmark, sample_postmark_payload):
         """Test webhook processing performance."""
         from fastapi.testclient import TestClient
+
         from src.webhook import app
-        
+
         # Mock config to disable signature verification for performance testing
         with patch('src.webhook.config') as mock_config:
             mock_config.webhook_endpoint = "/webhook"

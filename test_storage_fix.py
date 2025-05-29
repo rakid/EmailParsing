@@ -6,23 +6,22 @@ Test storage fix - using same import pattern as server
 print("Testing storage fix...")
 
 try:
-    import sys
     import os
-    
+    import sys
+
     # Add src directory to path (same as server.py)
     sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
     
     # Import server (which imports storage)
-    from src import server
-    
     # Import storage using same pattern as server
     import storage
+    from src import server
     
     print(f"Storage ID: {id(storage.email_storage)}")
     print(f"Storage length: {len(storage.email_storage)}")
     
     # Add test data
-    from models import ProcessedEmail, EmailData, EmailStatus
+    from models import EmailData, EmailStatus, ProcessedEmail
     
     email_data = EmailData(
         message_id="test-fix",

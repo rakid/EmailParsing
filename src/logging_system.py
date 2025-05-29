@@ -3,12 +3,12 @@
 Comprehensive Logging System for Inbox Zen MCP Server
 Provides structured, configurable logging for all components
 """
-import logging
 import json
+import logging
 import sys
 from datetime import datetime
-from typing import Dict, Any, Optional
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 
 class JSONFormatter(logging.Formatter):

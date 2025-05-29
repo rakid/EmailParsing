@@ -1,22 +1,27 @@
 """Unit tests for server.py - MCP Email Parsing Server"""
 
-import pytest
 import asyncio
 import json
-import sys
 import os
+import sys
 from datetime import datetime
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from mcp.types import Resource, Tool, TextContent, Prompt, PromptMessage
+import pytest
+from mcp.types import Prompt, PromptMessage, Resource, TextContent, Tool
 
 # Add src directory to path for imports (same as server.py)
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
 
 # Import server module and dependencies using same pattern as server.py
-from src import server
-import storage
-from models import ProcessedEmail, EmailData, EmailAnalysis, EmailStatus, UrgencyLevel
+from src import server, storage
+from src.models import (
+    EmailAnalysis,
+    EmailData,
+    EmailStatus,
+    ProcessedEmail,
+    UrgencyLevel,
+)
 
 
 class TestServerInitialization:

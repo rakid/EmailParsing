@@ -3,12 +3,12 @@
 Email Data Extraction Engine for Inbox Zen
 Handles intelligent parsing and extraction of email content and metadata
 """
-import re
 import html
-from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timedelta
-from dataclasses import dataclass
 import logging
+import re
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

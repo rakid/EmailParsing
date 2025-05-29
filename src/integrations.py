@@ -4,14 +4,15 @@ This module provides interfaces and data formats for future integrations
 including AI analysis modules, database systems, and plugin architecture.
 """
 
+import json
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Union, Protocol
 from datetime import datetime
 from enum import Enum
-import json
+from typing import Any, Dict, List, Optional, Protocol, Union
+
 from pydantic import BaseModel, Field
 
-from .models import ProcessedEmail, EmailData, EmailAnalysis, EmailStats
+from .models import EmailAnalysis, EmailData, EmailStats, ProcessedEmail
 
 
 class ExportFormat(str, Enum):

@@ -1,22 +1,29 @@
 """Unit tests for webhook.py - Postmark Webhook Handler"""
 
-import pytest
-import json
 import hashlib
 import hmac
-from datetime import datetime
-from unittest.mock import patch, MagicMock, AsyncMock
-from fastapi.testclient import TestClient
-from fastapi import HTTPException
-import sys
+import json
 import os
+import sys
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 # Add src to path and import with same pattern as webhook.py
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
 
-from src.webhook import app, verify_webhook_signature, extract_email_data
-from src.models import PostmarkWebhookPayload, EmailData, ProcessedEmail, EmailStatus, EmailAnalysis
 import storage  # Import storage module directly like webhook.py
+from src.models import (
+    EmailAnalysis,
+    EmailData,
+    EmailStatus,
+    PostmarkWebhookPayload,
+    ProcessedEmail,
+)
+from src.webhook import app, extract_email_data, verify_webhook_signature
 
 
 class TestWebhookSignatureVerification:
@@ -442,7 +449,7 @@ class TestWebhookEndpoints:
     def test_get_analytics_with_data(self, sample_email_data, sample_analysis_data):
         """Test analytics endpoint with data"""
         from src.models import UrgencyLevel
-        
+
         # Store emails with different urgency levels
         urgency_levels = [UrgencyLevel.LOW, UrgencyLevel.MEDIUM, UrgencyLevel.HIGH]
         for i, urgency in enumerate(urgency_levels):
@@ -576,8 +583,12 @@ class TestWebhookProcessing:
         assert response.status_code == 401
         assert "Invalid webhook signature" in response.json()["detail"]
     
-    def test_webhook_invalid_json(self):
+    @patch('src.webhook.config')
+    def test_webhook_invalid_json(self, mock_config):
         """Test webhook with invalid JSON payload"""
+        # Disable webhook signature verification
+        mock_config.postmark_webhook_secret = None
+        
         client = TestClient(app)
         
         # Send invalid JSON
@@ -590,9 +601,13 @@ class TestWebhookProcessing:
         assert response.status_code == 400
         assert "Invalid JSON payload" in response.json()["detail"]
     
+    @patch('src.webhook.config')
     @patch('src.webhook.email_extractor')
-    def test_webhook_processing_error(self, mock_extractor, sample_postmark_payload):
+    def test_webhook_processing_error(self, mock_extractor, mock_config, sample_postmark_payload):
         """Test webhook processing with extraction error"""
+        # Disable webhook signature verification
+        mock_config.postmark_webhook_secret = None
+        
         # Mock extraction to raise an exception
         mock_extractor.extract_from_email.side_effect = Exception("Extraction failed")
         
@@ -605,9 +620,13 @@ class TestWebhookProcessing:
         # Verify error stats were updated
         assert storage.stats.total_errors == 1
     
+    @patch('src.webhook.config')
     @patch('src.webhook.extract_email_data')
-    def test_webhook_email_data_extraction_error(self, mock_extract, sample_postmark_payload):
+    def test_webhook_email_data_extraction_error(self, mock_extract, mock_config, sample_postmark_payload):
         """Test webhook with email data extraction error"""
+        # Disable webhook signature verification
+        mock_config.postmark_webhook_secret = None
+        
         # Mock email data extraction to raise an exception
         mock_extract.side_effect = Exception("Email extraction failed")
         
@@ -728,7 +747,7 @@ class TestWebhookIntegration:
         """Test concurrent webhook processing"""
         import threading
         import time
-        
+
         # Mock dependencies to avoid complex setup
         with patch('src.webhook.config') as mock_config, \
              patch('src.webhook.email_extractor') as mock_extractor, \
