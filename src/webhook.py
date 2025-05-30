@@ -22,6 +22,7 @@ from typing import (
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from . import storage
 from .config import config
@@ -74,8 +75,20 @@ def verify_webhook_signature(body: bytes, signature: str, secret: str) -> bool:
         )
         return True
 
+    # Handle None signature
+    if signature is None:
+        return False
+
+    # Handle both string and bytes input for body
+    if isinstance(body, str):
+        body_bytes = body.encode("utf-8")
+    elif isinstance(body, bytes):
+        body_bytes = body
+    else:
+        return False
+
     expected_signature = hmac.new(
-        secret.encode("utf-8"), body, hashlib.sha256
+        secret.encode("utf-8"), body_bytes, hashlib.sha256
     ).hexdigest()
     return hmac.compare_digest(signature, expected_signature)
 
@@ -346,6 +359,17 @@ async def handle_postmark_webhook(
             },
         )
         raise HTTPException(status_code=400, detail="Invalid JSON payload.") from e
+    except ValidationError as e:
+        logger.log_processing_error(
+            e,
+            {
+                "error_type": "validation_error",
+                "validation_errors": str(e),
+            },
+        )
+        raise HTTPException(
+            status_code=422, detail=f"Validation error: {str(e)}"
+        ) from e
     except (
         HTTPException
     ):  # Re-raise HTTPExceptions directly (e.g., from _ensure_webhook_is_authentic)

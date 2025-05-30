@@ -27,6 +27,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import integration capabilities
 try:
+    from . import integrations
+    from .integrations import DataExporter, integration_registry
+
     INTEGRATIONS_AVAILABLE = True
 except ImportError:
     INTEGRATIONS_AVAILABLE = False
@@ -117,6 +120,7 @@ async def handle_read_resource(uri: str) -> str:
     elif uri == "email://stats":
         # Return current statistics with additional metadata
         stats_data = storage.stats.model_dump()
+        stats_data["total_emails_in_storage"] = len(storage.email_storage)
         stats_data["resource_info"] = {
             "uri": uri,
             "generated_at": datetime.now().isoformat(),
@@ -125,8 +129,13 @@ async def handle_read_resource(uri: str) -> str:
         return json.dumps(stats_data, indent=2, default=str)
 
     elif uri == "email://recent":
-        # Return last 10 emails
-        recent_emails = list(storage.email_storage.values())[-10:]
+        # Return last 10 emails, sorted by processed_at or received_at
+        all_emails = list(storage.email_storage.values())
+        # Sort by processed_at (most recent first), fall back to received_at
+        all_emails.sort(
+            key=lambda x: x.processed_at or x.email_data.received_at, reverse=True
+        )
+        recent_emails = all_emails[:10]
         return json.dumps(
             {
                 "count": len(recent_emails),
@@ -476,9 +485,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                     ]
 
                 # Create temporary EmailData for analysis
-                from datetime import datetime
-
-                from models import EmailData
+                from .models import EmailData
 
                 temp_email = EmailData(
                     message_id="temp-analysis",
@@ -734,7 +741,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
         filename = arguments.get("filename")
 
         try:
-            from integrations import DataExporter, ExportFormat
+            from .integrations import DataExporter, ExportFormat
 
             # Get emails to export (limited)
             emails_to_export = list(storage.email_storage.values())[:limit]
@@ -768,7 +775,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
 
     elif name == "list_integrations" and INTEGRATIONS_AVAILABLE:
         try:
-            from integrations import integration_registry
+            from .integrations import integration_registry
 
             integrations_info = integration_registry.list_integrations()
             plugin_info = integration_registry.plugin_manager.get_plugin_info()
@@ -807,7 +814,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
         email_id = arguments.get("email_id")
 
         try:
-            from integrations import integration_registry
+            from .integrations import integration_registry
 
             if email_id not in storage.email_storage:
                 return [TextContent(type="text", text=f"Email {email_id} not found")]

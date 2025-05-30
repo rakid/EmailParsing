@@ -10,6 +10,11 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol, Union
 
+try:
+    import asyncpg
+except ImportError:
+    asyncpg = None
+
 from pydantic import BaseModel, Field
 
 from .models import EmailAnalysis, EmailData, EmailStats, ProcessedEmail
@@ -251,7 +256,8 @@ class PostgreSQLInterface(DatabaseInterface):
     async def connect(self, connection_string: str) -> None:
         """Connect to PostgreSQL"""
         # Implementation would use asyncpg
-        # self.connection_pool = await asyncpg.create_pool(connection_string)
+        if asyncpg:
+            self.connection_pool = await asyncpg.create_pool(connection_string)
 
     async def store_email(self, email: ProcessedEmail) -> str:
         """Store email in PostgreSQL"""
@@ -293,8 +299,8 @@ class PostgreSQLInterface(DatabaseInterface):
     async def disconnect(self) -> None:
         """Close PostgreSQL connection"""
         # Implementation would close connection pool
-        # if self.connection_pool:
-        #     await self.connection_pool.close()
+        if self.connection_pool:
+            await self.connection_pool.close()
 
 
 # ============================================================================

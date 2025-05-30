@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
 from fastapi import FastAPI  # Import FastAPI
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 from src.logging_system import logger  # Import logger
@@ -48,8 +49,8 @@ class ServerConfig(BaseSettings):
     max_processing_time: float = 2.0  # seconds
     enable_async_processing: bool = True
 
-    # Logging configuration
-    log_level: str = "INFO"
+    # Logging configuration - conditionally use environment variables based on environment
+    log_level: str = Field(default="DEBUG")
     log_format: str = "text"  # "text" or "json"
     enable_console_colors: bool = True
     log_file_path: Optional[str] = None  # e.g., "logs/inbox-zen.log"
@@ -57,32 +58,41 @@ class ServerConfig(BaseSettings):
     log_file_backup_count: int = 5
 
     # Environment: "development" or "production"
-    # This can be used to adjust default logging behavior
-    environment: str = "development"
+    environment: str = Field(default="development")
+
+    # Debug mode
+    debug: bool = Field(default=True)
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Apply environment-specific defaults after initialization
+        self._apply_environment_defaults()
+
+    def _apply_environment_defaults(self):
+        """Apply environment-specific defaults"""
+        if self.environment == "production":
+            # Override with environment variables or production defaults
+            self.log_level = os.getenv("LOG_LEVEL", "INFO")
+            self.log_format = os.getenv("LOG_FORMAT", "json")
+            self.enable_console_colors = (
+                os.getenv("ENABLE_CONSOLE_COLORS", "False").lower() == "true"
+            )
+            self.debug = os.getenv("DEBUG", "False").lower() == "true"
+            if not self.log_file_path:
+                self.log_file_path = "logs/inbox-zen-prod.log"
+        # For development environment, Pydantic settings already loaded from .env
+        # No additional overrides needed here
 
     # Add lifespan manager to config to be accessible
     @property
     def lifespan_manager(self):
         return lifespan_manager
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
-
 
 # Global configuration instance
 config = ServerConfig()
-
-# Adjust logging defaults for production environment
-if config.environment == "production":
-    config.log_level = os.getenv("LOG_LEVEL", "INFO")
-    config.log_format = os.getenv("LOG_FORMAT", "json")
-    config.enable_console_colors = (
-        os.getenv("ENABLE_CONSOLE_COLORS", "False").lower() == "true"
-    )
-    if not config.log_file_path:
-        config.log_file_path = "logs/inbox-zen-prod.log"
 
 # Ensure log directory exists if file logging is enabled
 if config.log_file_path:
