@@ -78,7 +78,7 @@ class EmailProcessingLogger:
     def setup_logging(self):
         """Configure logging based on config settings"""
         try:
-            from config import config
+            from src.config import config
 
             log_level = config.log_level.upper()
             log_format = config.log_format.lower()
@@ -124,7 +124,7 @@ class EmailProcessingLogger:
     def setup_file_logging(self):
         """Setup file logging if configured"""
         try:
-            from config import config
+            from src.config import config
 
             if config.log_file_path:
                 # Ensure log directory exists

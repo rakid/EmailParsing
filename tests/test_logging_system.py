@@ -178,14 +178,17 @@ class TestEmailProcessingLogger:
         logger = EmailProcessingLogger("test-config")
         assert logger.logger.level == logging.DEBUG
 
-    @patch("src.logging_system.sys.modules")
-    def test_setup_logging_without_config(self, mock_modules):
+    def test_setup_logging_without_config(self):
         """Test logging setup without config (fallback)"""
-        # Mock the config module to not exist
-        mock_modules.__contains__.return_value = False
-        with patch(
-            "src.logging_system.importlib.import_module", side_effect=ImportError
-        ):
+        # Mock the import to fail specifically for src.config
+        original_import = __builtins__["__import__"]
+
+        def mock_import(name, *args, **kwargs):
+            if name == "src.config":
+                raise ImportError("No module named 'src.config'")
+            return original_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=mock_import):
             logger = EmailProcessingLogger("test-fallback")
             assert logger.logger.level == logging.INFO
 
