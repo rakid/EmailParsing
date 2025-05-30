@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """Simple test to replicate the exact test scenario"""
 
-import sys
-from pathlib import Path
 import asyncio
 import json
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add src to Python path (exactly like tests do)
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 # Import exactly like test_server.py does
 from src import server, storage
-from src.models import ProcessedEmail, EmailData, EmailAnalysis, EmailStatus
+from src.models import EmailAnalysis, EmailData, EmailStatus, ProcessedEmail
+
 
 async def replicate_test():
     print("=== Replicating Test Scenario ===")

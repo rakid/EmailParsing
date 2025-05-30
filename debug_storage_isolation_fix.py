@@ -3,12 +3,11 @@
 Test storage isolation fix
 """
 
-# Import the same way as tests
-from src import storage as test_storage
-from src.models import ProcessedEmail, EmailData, EmailStatus
-
 # Import server which should use the same storage
+# Import the same way as tests
 from src import server
+from src import storage as test_storage
+from src.models import EmailData, EmailStatus, ProcessedEmail
 
 # Add an email using test storage
 email_data = EmailData(
@@ -33,6 +32,7 @@ print(f"Test storage keys: {list(test_storage.email_storage.keys())}")
 
 # Check what server storage sees
 import sys
+
 sys.path.append('src')
 import storage as server_storage
 

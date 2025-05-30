@@ -3,14 +3,15 @@
 Comprehensive performance testing for the Email Parsing MCP Server.
 """
 
-import time
-import sys
 import asyncio
 import gc
-import psutil
-from pathlib import Path
+import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import List
+
+import psutil
 
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))

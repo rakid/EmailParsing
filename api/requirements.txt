@@ -1,0 +1,17 @@
+# Core MCP and FastAPI dependencies
+mcp>=1.0.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic[email]>=2.0.0
+python-multipart>=0.0.6
+
+# Additional dependencies for full functionality
+pydantic-settings>=2.0.0
+python-dateutil>=2.8.0
+aiofiles>=23.0.0
+
+# Development and testing (optional for production)
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+httpx>=0.25.0
