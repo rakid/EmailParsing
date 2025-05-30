@@ -1,4 +1,12 @@
 # Postmark Webhook Handler for Email Processing
+#
+# Security Configuration:
+# - HOST: Controls which network interfaces the server binds to
+#   * 127.0.0.1 (localhost) for development - more secure
+#   * 0.0.0.0 (all interfaces) for containerized/cloud deployments
+#   * Can be overridden via HOST environment variable
+# - PORT: Configurable via PORT environment variable (default: 8081)
+#
 import hashlib
 import hmac
 import json
@@ -33,7 +41,8 @@ from .models import (
 
 # Add src directory to path for imports
 # This line is for ensuring relative imports work from this file's location.
-# It's often better to manage PYTHONPATH or run as a module (python -m src.webhook).
+# It's often better to manage PYTHONPATH or run as a module (python -m
+# src.webhook).
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -116,13 +125,16 @@ def extract_email_data(
 async def _ensure_webhook_is_authentic(body: bytes, signature: Optional[str]) -> None:
     """
     Verify webhook authentication. Raises HTTPException if verification fails.
-    This combines the logic of config.postmark_webhook_secret check and actual verification.
+    This combines the logic of config.postmark_webhook_secret check and actual
+    verification.
     """
     if not config.postmark_webhook_secret:
         logger.warning(
-            "Webhook secret not configured. Skipping signature verification. This is insecure for production."
+            "Webhook secret not configured. Skipping signature verification. "
+            "This is insecure for production."
         )
-        # Allow if no secret is configured (e.g., for local dev without Postmark)
+        # Allow if no secret is configured (e.g., for local dev without
+        # Postmark)
         return
 
     if not signature:
@@ -157,7 +169,7 @@ def _create_email_analysis(
 ) -> EmailAnalysis:
     """Create an EmailAnalysis object from extracted data."""
     return EmailAnalysis(
-        urgency_score=urgency_score,
+        urgency_score=int(urgency_score),
         urgency_level=UrgencyLevel(
             urgency_level_str
         ),  # Assumes urgency_level_str is a valid UrgencyLevel member
@@ -239,7 +251,9 @@ def _update_stats(processing_time_taken: float) -> None:
         ]
         if emails_with_analysis:  # Avoid division by zero
             total_urgency = sum(
-                email.analysis.urgency_score for email in emails_with_analysis
+                email.analysis.urgency_score
+                for email in emails_with_analysis
+                if email.analysis
             )
             storage.stats.avg_urgency_score = total_urgency / len(emails_with_analysis)
         else:
@@ -295,7 +309,8 @@ async def handle_postmark_webhook(
             email_data=email_data,
             analysis=email_analysis,
             status=EmailStatus.ANALYZED,
-            processed_at=datetime.now(timezone.utc),  # Use timezone aware datetime
+            # Use timezone aware datetime
+            processed_at=datetime.now(timezone.utc),
             webhook_payload=payload_data,  # Store original payload if needed later
         )
 
@@ -318,7 +333,8 @@ async def handle_postmark_webhook(
             content={
                 "status": "success",
                 "processing_id": processing_id,
-                "message": f"Email {email_data.message_id} processed successfully.",
+                "message": f"Email {
+                    email_data.message_id} processed successfully.",
             },
         )
 
@@ -341,7 +357,8 @@ async def handle_postmark_webhook(
         storage.stats.total_errors += 1
         raise HTTPException(
             status_code=500,
-            detail=f"An unexpected error occurred during email processing: {str(e)}",
+            detail=f"An unexpected error occurred during email processing: {
+                str(e)}",
         )
 
 
@@ -355,14 +372,17 @@ async def detailed_health_check():
         "status": "healthy",
         "server_name": config.server_name,
         "server_version": config.server_version,
-        "emails_processed_in_memory": storage.stats.total_processed,  # Clarify in-memory
+        "emails_processed_in_memory": (
+            storage.stats.total_processed
+        ),  # Clarify in-memory
         "errors_logged": storage.stats.total_errors,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 # --- API Routes Integration ---
-# Import and include the API routes from the separate module for better modularity
+# Import and include the API routes from the separate module for better
+# modularity
 try:
     from .api_routes import router as api_router
 
@@ -382,7 +402,8 @@ VERCEL_ENV = os.getenv("VERCEL", "0") == "1"
 if SERVERLESS_ENV:
     # Apply serverless-specific configurations
     logger.info(
-        f"🚀 Running in serverless environment (Vercel: {VERCEL_ENV}). Applying optimizations..."
+        f"🚀 Running in serverless environment (Vercel: {VERCEL_ENV}). "
+        f"Applying optimizations..."
     )
     config.enable_async_processing = True  # Example, may depend on serverless_utils
     config.max_processing_time = min(
@@ -406,9 +427,18 @@ if __name__ == "__main__":
     # Ensure logger uses the latest config, especially if modified by
     # serverless detection
     logger.setup_logging()
+
+    # Configure host - secure defaults based on environment
+    default_host = (
+        "127.0.0.1"
+        if os.getenv("ENVIRONMENT") == "development"
+        else "0.0.0.0"  # nosec B104
+    )
+    host = os.getenv("HOST", default_host)
+
     uvicorn.run(
         app,
-        host="0.0.0.0",  # Standard host for containerized/server environments
+        host=host,  # Configurable host for security flexibility
         port=int(
             os.getenv("PORT", 8081)
         ),  # Allow port to be set by environment, default 8081

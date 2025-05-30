@@ -40,12 +40,14 @@ class EmailCategoryPlugin:
         self.categories = config.get(
             "categories", ["work", "personal", "marketing", "notifications", "support"]
         )
-        print(f"EmailCategoryPlugin initialized with categories: {self.categories}")
+        print(
+            f"EmailCategoryPlugin initialized with categories: {
+                self.categories}"
+        )
 
     async def process_email(self, email: ProcessedEmail) -> ProcessedEmail:
         """Add category based on email content"""
         subject = email.email_data.subject.lower()
-        from_email = email.email_data.from_email.lower()
 
         # Simple categorization logic
         if any(word in subject for word in ["urgent", "support", "help"]):
@@ -79,7 +81,10 @@ class SpamDetectionPlugin:
     async def initialize(self, config: dict) -> None:
         """Initialize spam detection"""
         self.spam_threshold = config.get("spam_threshold", 0.8)
-        print(f"SpamDetectionPlugin initialized with threshold: {self.spam_threshold}")
+        print(
+            f"SpamDetectionPlugin initialized with threshold: {
+                self.spam_threshold}"
+        )
 
     async def process_email(self, email: ProcessedEmail) -> ProcessedEmail:
         """Analyze for spam indicators"""
@@ -132,7 +137,10 @@ async def test_integration_system():
         {
             "subject": "URGENT: Server down, need immediate help!",
             "from": "client@business.com",
-            "text": "Our production server is down and we are losing money. Please help ASAP!",
+            "text": (
+                "Our production server is down and we are losing money. "
+                "Please help ASAP!"
+            ),
         },
         {
             "subject": "FREE MONEY! You're a winner!",

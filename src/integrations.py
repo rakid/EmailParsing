@@ -207,7 +207,9 @@ class SQLiteInterface(DatabaseInterface):
         """Retrieve email from SQLite"""
         # Implementation would execute SQL SELECT and convert back
         # async with aiosqlite.connect(self.db_path) as db:
-        #     cursor = await db.execute("SELECT * FROM emails WHERE id = ?", (email_id,))
+        #     cursor = await db.execute(
+        #         "SELECT * FROM emails WHERE id = ?", (email_id,)
+        #     )
         #     result = await cursor.fetchone()
         #     return convert_to_processed_email(result) if result else None
 
@@ -224,7 +226,9 @@ class SQLiteInterface(DatabaseInterface):
         """Get stats from SQLite"""
         # Implementation would execute aggregation queries
         # async with aiosqlite.connect(self.db_path) as db:
-        #     cursor = await db.execute("SELECT COUNT(*), AVG(urgency_score) FROM emails")
+        #     cursor = await db.execute(
+        #         "SELECT COUNT(*), AVG(urgency_score) FROM emails"
+        #     )
         #     result = await cursor.fetchone()
         #     return EmailStats(...)
         from .models import EmailStats
@@ -261,7 +265,9 @@ class PostgreSQLInterface(DatabaseInterface):
         """Retrieve email from PostgreSQL"""
         # Implementation would execute SQL SELECT and convert back
         # async with self.connection_pool.acquire() as conn:
-        #     result = await conn.fetchrow("SELECT * FROM emails WHERE id = $1", email_id)
+        #     result = await conn.fetchrow(
+        #         "SELECT * FROM emails WHERE id = $1", email_id
+        #     )
         #     return convert_to_processed_email(result) if result else None
 
     async def search_emails(self, query: Dict[str, Any]) -> List[ProcessedEmail]:
@@ -276,7 +282,9 @@ class PostgreSQLInterface(DatabaseInterface):
         """Get stats from PostgreSQL"""
         # Implementation would execute aggregation queries
         # async with self.connection_pool.acquire() as conn:
-        #     stats_data = await conn.fetchrow("SELECT COUNT(*), AVG(urgency_score) FROM emails")
+        #     stats_data = await conn.fetchrow(
+        #         "SELECT COUNT(*), AVG(urgency_score) FROM emails"
+        #     )
         #     return EmailStats(...)
         from .models import EmailStats
 
@@ -364,7 +372,10 @@ class OpenAIInterface(AIAnalysisInterface):
         """Fine-tune model with training data"""
         # Implementation would use OpenAI fine-tuning API
         # For now, just log the training request
-        print(f"Training request for {len(training_data)} samples (placeholder)")
+        print(
+            f"Training request for {
+                len(training_data)} samples (placeholder)"
+        )
 
 
 # ============================================================================
@@ -406,21 +417,38 @@ class PluginManager:
     def __init__(self):
         self.plugins: Dict[str, PluginInterface] = {}
         self.plugin_order: List[str] = []
+        self.plugin_priorities: Dict[str, int] = {}
 
     def register_plugin(self, plugin: PluginInterface, priority: int = 100) -> None:
         """Register a plugin with priority (lower = higher priority)"""
         name = plugin.get_name()
         self.plugins[name] = plugin
 
-        # Insert in order based on priority
-        # Implementation would maintain sorted order
-        self.plugin_order.append(name)
+        # Store priority for this plugin
+        self.plugin_priorities[name] = priority
+
+        # Insert in order based on priority (lower = higher priority)
+        # Find the correct position to maintain sorted order
+        inserted = False
+        for i, existing_name in enumerate(self.plugin_order):
+            existing_priority = self.plugin_priorities.get(existing_name, 100)
+            if priority < existing_priority:
+                self.plugin_order.insert(i, name)
+                inserted = True
+                break
+
+        # If not inserted yet, append at the end
+        if not inserted:
+            self.plugin_order.append(name)
 
     def unregister_plugin(self, plugin_name: str) -> None:
         """Unregister a plugin"""
         if plugin_name in self.plugins:
             del self.plugins[plugin_name]
             self.plugin_order.remove(plugin_name)
+            # Clean up priority information
+            if plugin_name in self.plugin_priorities:
+                del self.plugin_priorities[plugin_name]
 
     async def process_email_through_plugins(
         self, email: ProcessedEmail
@@ -445,6 +473,7 @@ class PluginManager:
                 "name": plugin.get_name(),
                 "version": plugin.get_version(),
                 "dependencies": plugin.get_dependencies(),
+                "priority": self.plugin_priorities.get(name, 100),
             }
             for name, plugin in self.plugins.items()
         }

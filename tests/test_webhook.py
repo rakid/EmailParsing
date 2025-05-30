@@ -50,14 +50,17 @@ def sample_postmark_payload():
         "TextBody": """
 Hi Jane,
 
-I hope this email finds you well. I wanted to reach out regarding the Q4 marketing campaign project that we discussed last week.
+I hope this email finds you well. I wanted to reach out regarding the Q4
+marketing campaign project that we discussed last week.
 
 URGENT TASKS:
 1. Review the budget proposal by tomorrow 5 PM
 2. Schedule meeting with stakeholders for Friday
 3. Submit final report to management
 
-The deadline is tomorrow and I'm getting quite stressed about this. Can you please prioritize this? The client is breathing down our necks and we really need to deliver.
+The deadline is tomorrow and I'm getting quite stressed about this. Can you
+please prioritize this? The client is breathing down our necks and we really
+need to deliver.
 
 Please let me know if you can help with this ASAP.
 
@@ -70,14 +73,17 @@ P.S. - Also, can you call me at 555-123-4567 when you get this?
 <html>
 <body>
 <p>Hi Jane,</p>
-<p>I hope this email finds you well. I wanted to reach out regarding the Q4 marketing campaign project that we discussed last week.</p>
+<p>I hope this email finds you well. I wanted to reach out regarding the Q4
+marketing campaign project that we discussed last week.</p>
 <p><strong>URGENT TASKS:</strong></p>
 <ol>
 <li>Review the budget proposal by tomorrow 5 PM</li>
 <li>Schedule meeting with stakeholders for Friday</li>
 <li>Submit final report to management</li>
 </ol>
-<p>The deadline is tomorrow and I'm getting quite <em>stressed</em> about this. Can you please prioritize this? The client is breathing down our necks and we really need to deliver.</p>
+<p>The deadline is tomorrow and I'm getting quite <em>stressed</em> about this.
+Can you please prioritize this? The client is breathing down our necks and we
+really need to deliver.</p>
 <p>Please let me know if you can help with this ASAP.</p>
 <p>Best regards,<br>John</p>
 <p>P.S. - Also, can you call me at 555-123-4567 when you get this?</p>
@@ -105,14 +111,17 @@ def sample_email_data():
         "text_body": """
 Hi Jane,
 
-I hope this email finds you well. I wanted to reach out regarding the Q4 marketing campaign project that we discussed last week.
+I hope this email finds you well. I wanted to reach out regarding the Q4
+marketing campaign project that we discussed last week.
 
 URGENT TASKS:
 1. Review the budget proposal by tomorrow 5 PM
 2. Schedule meeting with stakeholders for Friday
 3. Submit final report to management
 
-The deadline is tomorrow and I'm getting quite stressed about this. Can you please prioritize this? The client is breathing down our necks and we really need to deliver.
+The deadline is tomorrow and I'm getting quite stressed about this. Can you
+please prioritize this? The client is breathing down our necks and we really
+need to deliver.
 
 Please let me know if you can help with this ASAP.
 
@@ -125,14 +134,17 @@ P.S. - Also, can you call me at 555-123-4567 when you get this?
 <html>
 <body>
 <p>Hi Jane,</p>
-<p>I hope this email finds you well. I wanted to reach out regarding the Q4 marketing campaign project that we discussed last week.</p>
+<p>I hope this email finds you well. I wanted to reach out regarding the Q4
+marketing campaign project that we discussed last week.</p>
 <p><strong>URGENT TASKS:</strong></p>
 <ol>
 <li>Review the budget proposal by tomorrow 5 PM</li>
 <li>Schedule meeting with stakeholders for Friday</li>
 <li>Submit final report to management</li>
 </ol>
-<p>The deadline is tomorrow and I'm getting quite <em>stressed</em> about this. Can you please prioritize this? The client is breathing down our necks and we really need to deliver.</p>
+<p>The deadline is tomorrow and I'm getting quite <em>stressed</em> about this.
+Can you please prioritize this? The client is breathing down our necks and we
+really need to deliver.</p>
 <p>Please let me know if you can help with this ASAP.</p>
 <p>Best regards,<br>John</p>
 <p>P.S. - Also, can you call me at 555-123-4567 when you get this?</p>
@@ -452,7 +464,6 @@ class TestWebhookEndpoints:
                 "urgency_level": urgency,
                 "sentiment": sentiment,
             }
-            from src.models import EmailAnalysis, UrgencyLevel
 
             analysis = EmailAnalysis(
                 **{**analysis_data, "urgency_level": UrgencyLevel(urgency)}
@@ -899,7 +910,7 @@ class TestWebhookIntegration:
         with (
             patch("src.webhook.config") as mock_config,
             patch("src.webhook.email_extractor") as mock_extractor,
-            patch("src.webhook.logger") as mock_logger,
+            patch("src.webhook.logger"),
         ):
 
             mock_config.webhook_endpoint = "/webhook"

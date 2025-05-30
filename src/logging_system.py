@@ -8,7 +8,7 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 class JSONFormatter(logging.Formatter):
@@ -137,17 +137,24 @@ class EmailProcessingLogger:
                     backupCount=config.log_file_backup_count,
                 )
 
-                # Use JSON formatter for file logs in production, or as configured
+                # Use JSON formatter for file logs in production, or as
+                # configured
                 if config.environment == "production" or config.log_format == "json":
                     file_handler.setFormatter(JSONFormatter())
                 else:
                     # Standard text format for file logs in dev if not json
-                    format_string = "%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(funcName)s:%(lineno)d - %(message)s"
+                    format_string = (
+                        "%(asctime)s - %(name)s - %(levelname)s - "
+                        "%(module)s:%(funcName)s:%(lineno)d - %(message)s"
+                    )
                     file_handler.setFormatter(logging.Formatter(format_string))
 
                 file_handler.setLevel(self.logger.level)
                 self.logger.addHandler(file_handler)
-                self.logger.info(f"File logging enabled: {config.log_file_path}")
+                self.logger.info(
+                    f"File logging enabled: {
+                        config.log_file_path}"
+                )
         except ImportError:
             # Config not available, skip file logging
             pass
@@ -260,7 +267,7 @@ class EmailProcessingLogger:
             },
         )
 
-    def log_mcp_request(self, method: str, params: Dict[str, Any] = None):
+    def log_mcp_request(self, method: str, params: Optional[Dict[str, Any]] = None):
         """Log MCP server requests"""
         self.logger.debug(
             f"MCP request: {method}",
@@ -292,7 +299,8 @@ class EmailProcessingLogger:
 
     def log_system_stats(self, stats=None):
         """Log system statistics"""
-        # Use passed stats parameter if provided (for testing), otherwise import from storage
+        # Use passed stats parameter if provided (for testing), otherwise
+        # import from storage
         if stats is not None:
             storage_stats = stats
         else:

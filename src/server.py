@@ -4,10 +4,13 @@ import json
 import os
 import sys
 from datetime import datetime
+from typing import Any, Dict, Optional
 
 from mcp.server import Server
 from mcp.types import (
+    AnyUrl,
     Prompt,
+    PromptArgument,
     PromptMessage,
     Resource,
     TextContent,
@@ -24,18 +27,20 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import integration capabilities
 try:
-    pass
-
     INTEGRATIONS_AVAILABLE = True
 except ImportError:
     INTEGRATIONS_AVAILABLE = False
     print("⚠️ Integration module not available - running in basic mode")
 
 # Initialize MCP server with metadata
-server = Server(
+server: Server = Server(
     name=config.server_name,
     version=config.server_version,
-    instructions="MCP server for unified email entry, parsing, and analysis for Inbox Zen application. Receives Postmark webhooks and performs intelligent email analysis.",
+    instructions=(
+        "MCP server for unified email entry, parsing, and analysis for "
+        "Inbox Zen application. Receives Postmark webhooks and performs "
+        "intelligent email analysis."
+    ),
 )
 
 
@@ -45,44 +50,44 @@ async def handle_list_resources() -> list[Resource]:
     """List available email resources with proper MCP schema"""
     return [
         Resource(
-            uri="email://processed",
+            uri=AnyUrl("email://processed"),
             name="Processed Emails",
             description="Access to all processed email data with analysis results",
             mimeType="application/json",
         ),
         Resource(
-            uri="email://stats",
+            uri=AnyUrl("email://stats"),
             name="Email Statistics",
             description="Real-time email processing statistics and analytics",
             mimeType="application/json",
         ),
         Resource(
-            uri="email://recent",
+            uri=AnyUrl("email://recent"),
             name="Recent Emails",
             description="Last 10 processed emails with analysis",
             mimeType="application/json",
         ),
         Resource(
-            uri="email://analytics",
+            uri=AnyUrl("email://analytics"),
             name="Email Analytics",
             description="Comprehensive analytics and distribution data",
             mimeType="application/json",
         ),
         Resource(
-            uri="email://high-urgency",
+            uri=AnyUrl("email://high-urgency"),
             name="High Urgency Emails",
             description="Emails marked as high urgency requiring immediate attention",
             mimeType="application/json",
         ),
         Resource(
-            uri="email://tasks",
+            uri=AnyUrl("email://tasks"),
             name="Email Tasks",
             description="Extracted tasks and action items from emails",
             mimeType="application/json",
         ),
     ] + [
         Resource(
-            uri=f"email://processed/{email_id}",
+            uri=AnyUrl(f"email://processed/{email_id}"),
             name=f"Email {email_id[:8]}...",
             description=f"Individual email data and analysis for {email_id}",
             mimeType="application/json",
@@ -152,9 +157,10 @@ async def handle_read_resource(uri: str) -> str:
         urgency_scores = []
 
         for email in emails_with_analysis:
-            urgency_dist[email.analysis.urgency_level.value] += 1
-            sentiment_dist[email.analysis.sentiment] += 1
-            urgency_scores.append(email.analysis.urgency_score)
+            if email.analysis:  # Additional None check for mypy
+                urgency_dist[email.analysis.urgency_level.value] += 1
+                sentiment_dist[email.analysis.sentiment] += 1
+                urgency_scores.append(email.analysis.urgency_score)
 
         analytics_data = {
             "total_emails": len(storage.email_storage),
@@ -194,7 +200,7 @@ async def handle_read_resource(uri: str) -> str:
 
     elif uri == "email://tasks":
         # Return extracted tasks from all emails
-        tasks = []
+        tasks: list[Dict[str, Any]] = []
         for email in storage.email_storage.values():
             if (
                 email.analysis and email.analysis.urgency_score >= 40
@@ -212,7 +218,7 @@ async def handle_read_resource(uri: str) -> str:
                 tasks.append(task_data)
 
         # Sort by urgency score
-        tasks.sort(key=lambda x: x["urgency_score"], reverse=True)
+        tasks.sort(key=lambda x: int(x.get("urgency_score", 0)), reverse=True)
 
         return json.dumps(
             {
@@ -255,21 +261,32 @@ async def handle_list_tools() -> list[Tool]:
     tools = [
         Tool(
             name="analyze_email",
-            description="Analyze email content for urgency, sentiment, and metadata using regex patterns",
+            description=(
+                "Analyze email content for urgency, sentiment, and metadata "
+                "using regex patterns"
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "email_id": {
                         "type": "string",
-                        "description": "Email ID to analyze (optional, will use content if not provided)",
+                        "description": (
+                            "Email ID to analyze (optional, will use content "
+                            "if not provided)"
+                        ),
                     },
                     "content": {
                         "type": "string",
-                        "description": "Email content to analyze (required if email_id not provided)",
+                        "description": (
+                            "Email content to analyze (required if email_id "
+                            "not provided)"
+                        ),
                     },
                     "subject": {
                         "type": "string",
-                        "description": "Email subject line (optional, enhances analysis)",
+                        "description": (
+                            "Email subject line (optional, enhances analysis)"
+                        ),
                     },
                 },
                 "anyOf": [{"required": ["email_id"]}, {"required": ["content"]}],
@@ -300,7 +317,7 @@ async def handle_list_tools() -> list[Tool]:
                         "minimum": 1,
                         "maximum": 100,
                         "default": 10,
-                        "description": "Maximum number of results to return",
+                        "description": ("Maximum number of results to return"),
                     },
                 },
             },
@@ -314,27 +331,31 @@ async def handle_list_tools() -> list[Tool]:
                     "include_distribution": {
                         "type": "boolean",
                         "default": True,
-                        "description": "Include urgency and sentiment distribution data",
+                        "description": (
+                            "Include urgency and sentiment distribution data"
+                        ),
                     }
                 },
             },
         ),
         Tool(
             name="extract_tasks",
-            description="Extract action items and tasks from emails",
+            description=("Extract action items and tasks from emails"),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "email_id": {
                         "type": "string",
-                        "description": "Specific email ID to extract tasks from",
+                        "description": ("Specific email ID to extract tasks from"),
                     },
                     "urgency_threshold": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 100,
                         "default": 40,
-                        "description": "Minimum urgency score to consider for task extraction",
+                        "description": (
+                            "Minimum urgency score to consider for task " "extraction"
+                        ),
                     },
                 },
             },
@@ -345,7 +366,10 @@ async def handle_list_tools() -> list[Tool]:
             # Data Export Tool
             Tool(
                 name="export_emails",
-                description="Export processed emails in various formats for AI analysis or database storage",
+                description=(
+                    "Export processed emails in various formats for AI "
+                    "analysis or database storage"
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -358,11 +382,11 @@ async def handle_list_tools() -> list[Tool]:
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 1000,
-                            "description": "Maximum number of emails to export",
+                            "description": ("Maximum number of emails to export"),
                         },
                         "filename": {
                             "type": "string",
-                            "description": "Output filename (optional)",
+                            "description": ("Output filename (optional)"),
                         },
                     },
                     "required": ["format"],
@@ -371,13 +395,19 @@ async def handle_list_tools() -> list[Tool]:
             # List Integrations Tool
             Tool(
                 name="list_integrations",
-                description="List all available integrations (databases, AI interfaces, plugins)",
+                description=(
+                    "List all available integrations (databases, AI interfaces, "
+                    "plugins)"
+                ),
                 inputSchema={"type": "object", "properties": {}, "required": []},
             ),
             # Process through Plugins Tool
             Tool(
                 name="process_through_plugins",
-                description="Process an email through all registered plugins for enhanced analysis",
+                description=(
+                    "Process an email through all registered plugins for "
+                    "enhanced analysis"
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -422,7 +452,9 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                         "confidence": processed_email.analysis.confidence,
                         "keywords": processed_email.analysis.keywords,
                         "action_items": processed_email.analysis.action_items,
-                        "temporal_references": processed_email.analysis.temporal_references,
+                        "temporal_references": (
+                            processed_email.analysis.temporal_references
+                        ),
                         "tags": processed_email.analysis.tags,
                         "category": processed_email.analysis.category,
                     }
@@ -459,8 +491,10 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
 
                 # Extract metadata
                 extracted_metadata = email_extractor.extract_from_email(temp_email)
-                urgency_score, urgency_level = email_extractor.calculate_urgency_score(
-                    extracted_metadata.urgency_indicators
+                urgency_score, analysis_urgency_level = (
+                    email_extractor.calculate_urgency_score(
+                        extracted_metadata.urgency_indicators
+                    )
                 )
 
                 # Determine sentiment
@@ -468,21 +502,21 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                 if len(sentiment_indicators["positive"]) > len(
                     sentiment_indicators["negative"]
                 ):
-                    sentiment = "positive"
+                    analysis_sentiment = "positive"
                 elif len(sentiment_indicators["negative"]) > len(
                     sentiment_indicators["positive"]
                 ):
-                    sentiment = "negative"
+                    analysis_sentiment = "negative"
                 else:
-                    sentiment = "neutral"
+                    analysis_sentiment = "neutral"
 
                 analysis_result = {
                     "content_analyzed": (
                         content[:100] + "..." if len(content) > 100 else content
                     ),
                     "urgency_score": urgency_score,
-                    "urgency_level": urgency_level,
-                    "sentiment": sentiment,
+                    "urgency_level": analysis_urgency_level,
+                    "sentiment": analysis_sentiment,
                     "keywords": extracted_metadata.priority_keywords[:10],
                     "action_items": extracted_metadata.action_words[:5],
                     "temporal_references": extracted_metadata.temporal_references[:5],
@@ -498,13 +532,13 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=f"Analysis error: {str(e)}")]
 
     elif name == "search_emails":
-        query = arguments.get("query", "")
-        urgency_level = arguments.get("urgency_level")
-        sentiment = arguments.get("sentiment")
+        query = str(arguments.get("query", ""))
+        urgency_level: Optional[str] = arguments.get("urgency_level")
+        sentiment: Optional[str] = arguments.get("sentiment")
         limit = arguments.get("limit", 10)
 
         try:
-            results = []
+            results: list[Dict[str, Any]] = []
             for email in storage.email_storage.values():
                 # Apply filters
                 if (
@@ -529,7 +563,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                         continue
 
                 # Add to results
-                result = {
+                result: Dict[str, Any] = {
                     "id": email.id,
                     "message_id": email.email_data.message_id,
                     "from": email.email_data.from_email,
@@ -553,7 +587,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                 if len(results) >= limit:
                     break
 
-            search_result = {
+            search_result: Dict[str, Any] = {
                 "query": query,
                 "filters": {"urgency_level": urgency_level, "sentiment": sentiment},
                 "total_found": len(results),
@@ -574,7 +608,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                 1 for email in storage.email_storage.values() if email.analysis
             )
 
-            stats_result = {
+            stats_result: Dict[str, Any] = {
                 "total_emails": total_emails,
                 "total_processed": storage.stats.total_processed,
                 "analyzed_emails": analyzed_emails,
@@ -631,7 +665,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
         urgency_threshold = arguments.get("urgency_threshold", 40)
 
         try:
-            tasks = []
+            tasks: list[Dict[str, Any]] = []
 
             if email_id:
                 # Extract tasks from specific email
@@ -685,7 +719,13 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         except Exception as e:
-            return [TextContent(type="text", text=f"Task extraction error: {str(e)}")]
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Task extraction error: {
+                        str(e)}",
+                )
+            ]
 
     # --- Integration Tool Handlers ---
     # Integration tools (available only if integrations module is loaded)
@@ -714,7 +754,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                 emails_to_export, export_format_enum, filename
             )
 
-            result = {
+            export_result: Dict[str, Any] = {
                 "success": True,
                 "format": export_format,
                 "exported_count": len(emails_to_export),
@@ -722,7 +762,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "exported_at": datetime.now().isoformat(),
             }
 
-            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            return [TextContent(type="text", text=json.dumps(export_result, indent=2))]
 
         except Exception as e:
             return [TextContent(type="text", text=f"Export error: {str(e)}")]
@@ -734,7 +774,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
             integrations_info = integration_registry.list_integrations()
             plugin_info = integration_registry.plugin_manager.get_plugin_info()
 
-            result = {
+            integrations_result: Dict[str, Any] = {
                 "integrations_available": True,
                 "databases": integrations_info.get("databases", []),
                 "ai_interfaces": integrations_info.get("ai_interfaces", []),
@@ -751,11 +791,17 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                 },
             }
 
-            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            return [
+                TextContent(type="text", text=json.dumps(integrations_result, indent=2))
+            ]
 
         except Exception as e:
             return [
-                TextContent(type="text", text=f"Integration listing error: {str(e)}")
+                TextContent(
+                    type="text",
+                    text=f"Integration listing error: {
+                        str(e)}",
+                )
             ]
 
     elif name == "process_through_plugins" and INTEGRATIONS_AVAILABLE:
@@ -779,7 +825,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
             # Update storage with processed email
             storage.email_storage[email_id] = processed_email
 
-            result = {
+            plugin_result: Dict[str, Any] = {
                 "success": True,
                 "email_id": email_id,
                 "plugins_applied": len(integration_registry.plugin_manager.plugins),
@@ -792,10 +838,16 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "processed_at": datetime.now().isoformat(),
             }
 
-            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            return [TextContent(type="text", text=json.dumps(plugin_result, indent=2))]
 
         except Exception as e:
-            return [TextContent(type="text", text=f"Plugin processing error: {str(e)}")]
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Plugin processing error: {
+                        str(e)}",
+                )
+            ]
 
     # --- Fallback for unknown tool ---
     else:
@@ -810,14 +862,14 @@ async def handle_list_prompts() -> list[Prompt]:
             name="email_analysis",
             description="Prompt for comprehensive email analysis",
             arguments=[
-                {
-                    "name": "email_content",
-                    "description": "The email content to analyze",
-                },
-                {
-                    "name": "analysis_type",
-                    "description": "Type of analysis (urgency, sentiment, tasks)",
-                },
+                PromptArgument(
+                    name="email_content",
+                    description="The email content to analyze",
+                ),
+                PromptArgument(
+                    name="analysis_type",
+                    description="Type of analysis (urgency, sentiment, tasks)",
+                ),
             ],
         )
     ]

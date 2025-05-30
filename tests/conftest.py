@@ -3,9 +3,7 @@ Pytest configuration and shared fixtures for unit tests
 """
 
 import asyncio
-import sys
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
@@ -17,10 +15,11 @@ def pytest_configure(config):
     """Configure pytest settings"""
     # Set asyncio event loop scope to function to avoid warnings
     config.option.asyncio_default_fixture_loop_scope = "function"
-
-
-# Add src to Python path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+    # Add custom markers
+    config.addinivalue_line("markers", "unit: mark test as unit test")
+    config.addinivalue_line("markers", "integration: mark test as integration test")
+    config.addinivalue_line("markers", "slow: mark test as slow running")
+    config.addinivalue_line("markers", "edge_case: mark test as edge case scenario")
 
 
 @pytest.fixture
@@ -34,14 +33,17 @@ def sample_email_data():
         "text_body": """
 Hi Jane,
 
-I hope this email finds you well. I wanted to reach out regarding the Q4 marketing campaign project that we discussed last week.
+I hope this email finds you well. I wanted to reach out regarding the Q4
+marketing campaign project that we discussed last week.
 
 URGENT TASKS:
 1. Review the budget proposal by tomorrow 5 PM
 2. Schedule meeting with stakeholders for Friday
 3. Submit final report to management
 
-The deadline is tomorrow and I'm getting quite stressed about this. Can you please prioritize this? The client is breathing down our necks and we really need to deliver.
+The deadline is tomorrow and I'm getting quite stressed about this. Can you
+please prioritize this? The client is breathing down our necks and we really
+need to deliver.
 
 Please let me know if you can help with this ASAP.
 
@@ -54,14 +56,17 @@ P.S. - Also, can you call me at 555-123-4567 when you get this?
 <html>
 <body>
 <p>Hi Jane,</p>
-<p>I hope this email finds you well. I wanted to reach out regarding the Q4 marketing campaign project that we discussed last week.</p>
+<p>I hope this email finds you well. I wanted to reach out regarding the Q4
+marketing campaign project that we discussed last week.</p>
 <p><strong>URGENT TASKS:</strong></p>
 <ol>
 <li>Review the budget proposal by tomorrow 5 PM</li>
 <li>Schedule meeting with stakeholders for Friday</li>
 <li>Submit final report to management</li>
 </ol>
-<p>The deadline is tomorrow and I'm getting quite <em>stressed</em> about this. Can you please prioritize this? The client is breathing down our necks and we really need to deliver.</p>
+<p>The deadline is tomorrow and I'm getting quite <em>stressed</em> about this.
+Can you please prioritize this? The client is breathing down our necks and we
+really need to deliver.</p>
 <p>Please let me know if you can help with this ASAP.</p>
 <p>Best regards,<br>John</p>
 <p>P.S. - Also, can you call me at 555-123-4567 when you get this?</p>
@@ -117,7 +122,8 @@ def sample_positive_email():
         "text_body": """
 Dear Team,
 
-I'm thrilled to announce that we've exceeded our Q1 targets by 15%! This is fantastic news and a testament to everyone's hard work.
+I'm thrilled to announce that we've exceeded our Q1 targets by 15%! This is
+fantastic news and a testament to everyone's hard work.
 
 Great job everyone! Let's celebrate this achievement. Team lunch on Friday!
 
@@ -200,14 +206,17 @@ def sample_postmark_payload():
 <html>
 <body>
 <p>Hi Jane,</p>
-<p>I hope this email finds you well. I wanted to reach out regarding the Q4 marketing campaign project that we discussed last week.</p>
+<p>I hope this email finds you well. I wanted to reach out regarding the Q4
+marketing campaign project that we discussed last week.</p>
 <p><strong>URGENT TASKS:</strong></p>
 <ol>
 <li>Review the budget proposal by tomorrow 5 PM</li>
 <li>Schedule meeting with stakeholders for Friday</li>
 <li>Submit final report to management</li>
 </ol>
-<p>The deadline is tomorrow and I'm getting quite <em>stressed</em> about this. Can you please prioritize this? The client is breathing down our necks and we really need to deliver.</p>
+<p>The deadline is tomorrow and I'm getting quite <em>stressed</em> about this.
+Can you please prioritize this? The client is breathing down our necks and we
+really need to deliver.</p>
 <p>Please let me know if you can help with this ASAP.</p>
 <p>Best regards,<br>John</p>
 <p>P.S. - Also, can you call me at 555-123-4567 when you get this?</p>
@@ -217,14 +226,17 @@ def sample_postmark_payload():
         "TextBody": """
 Hi Jane,
 
-I hope this email finds you well. I wanted to reach out regarding the Q4 marketing campaign project that we discussed last week.
+I hope this email finds you well. I wanted to reach out regarding the Q4
+marketing campaign project that we discussed last week.
 
 URGENT TASKS:
 1. Review the budget proposal by tomorrow 5 PM
 2. Schedule meeting with stakeholders for Friday
 3. Submit final report to management
 
-The deadline is tomorrow and I'm getting quite stressed about this. Can you please prioritize this? The client is breathing down our necks and we really need to deliver.
+The deadline is tomorrow and I'm getting quite stressed about this. Can you
+please prioritize this? The client is breathing down our necks and we really
+need to deliver.
 
 Please let me know if you can help with this ASAP.
 
@@ -374,12 +386,3 @@ def edge_case_emails():
             },
         },
     ]
-
-
-# Pytest configuration
-def pytest_configure(config):
-    """Configure pytest with custom markers"""
-    config.addinivalue_line("markers", "unit: mark test as unit test")
-    config.addinivalue_line("markers", "integration: mark test as integration test")
-    config.addinivalue_line("markers", "slow: mark test as slow running")
-    config.addinivalue_line("markers", "edge_case: mark test as edge case scenario")

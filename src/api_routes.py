@@ -134,7 +134,7 @@ async def get_emails(
                 for email in emails
                 if (
                     search_lower in email.email_data.subject.lower()
-                    or search_lower in email.email_data.text_body.lower()
+                    or search_lower in (email.email_data.text_body or "").lower()
                     or search_lower in email.email_data.from_email.lower()
                 )
             ]
@@ -274,7 +274,7 @@ async def search_emails(
         for email in emails:
             if (
                 query_lower in email.email_data.subject.lower()
-                or query_lower in email.email_data.text_body.lower()
+                or query_lower in (email.email_data.text_body or "").lower()
                 or query_lower in email.email_data.from_email.lower()
                 or any(
                     query_lower in to_email.lower()

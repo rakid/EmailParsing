@@ -87,9 +87,11 @@ We have a critical outage affecting all customers. Need immediate action:
 This needs to be resolved within 1 hour. Call me at 555-999-8888.
 
 Status: CRITICAL
-Priority: P0
-""",
-            "HtmlBody": "<p><strong>URGENT:</strong> Production server is down!</p><p>We have a critical outage affecting all customers...</p>",
+Priority: P0        """,
+            "HtmlBody": (
+                "<p><strong>URGENT:</strong> Production server is down!</p>"
+                "<p>We have a critical outage affecting all customers...</p>"
+            ),
             "MessageID": "integration-test-123@postmark.com",
             "Date": "2025-05-28T10:30:00.000Z",
             "Headers": [
@@ -232,7 +234,10 @@ Priority: P0
                 "From": "urgent@company.com",
                 "To": "manager@company.com",
                 "Subject": "URGENT: Critical bug in production",
-                "TextBody": "We have a critical bug affecting payments. Need to fix ASAP. Deadline is tomorrow at 5 PM.",
+                "TextBody": (
+                    "We have a critical bug affecting payments. Need to fix ASAP. "
+                    "Deadline is tomorrow at 5 PM."
+                ),
                 "MessageID": "urgent-bug@company.com",
             },
             {
@@ -246,7 +251,10 @@ Priority: P0
                 "From": "manager@company.com",
                 "To": "team@company.com",
                 "Subject": "Meeting scheduled for Friday",
-                "TextBody": "Please review the agenda and prepare your status updates. Meeting is at 2 PM on Friday.",
+                "TextBody": (
+                    "Please review the agenda and prepare your status updates. "
+                    "Meeting is at 2 PM on Friday."
+                ),
                 "MessageID": "meeting@company.com",
             },
         ]
@@ -465,7 +473,10 @@ This is a performance test email with various content that should trigger analys
                 "To": "recipient@example.com",
                 "ToFull": [{"Email": "recipient@example.com", "Name": "Recipient"}],
                 "Subject": f"Test Email {i} with some urgent content and analysis",
-                "TextBody": f"This is test email {i} with urgent tasks and deadlines to analyze.",
+                "TextBody": (
+                    f"This is test email {i} with urgent tasks and deadlines "
+                    f"to analyze."
+                ),
                 "MessageID": f"memory-test-{i}@example.com",
                 "Date": "2025-05-28T10:30:00.000Z",
                 "Headers": [],

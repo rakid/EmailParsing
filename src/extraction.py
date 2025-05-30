@@ -16,12 +16,12 @@ logger = logging.getLogger(__name__)
 class ExtractedMetadata:
     """Container for extracted email metadata"""
 
-    urgency_indicators: List[str]
+    urgency_indicators: Dict[str, List[str]]
     temporal_references: List[str]
     contact_info: Dict[str, List[str]]  # phone, email, etc.
     links: List[str]
     action_words: List[str]
-    sentiment_indicators: List[str]
+    sentiment_indicators: Dict[str, List[str]]
     priority_keywords: List[str]
 
 
@@ -55,10 +55,12 @@ class EmailExtractor:
     # Temporal reference patterns
     TIME_PATTERNS = [
         r"\b(today|tomorrow|yesterday)\b",
-        r"\b(this|next|last)\s+(week|month|year|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+        r"\b(this|next|last)\s+"
+        r"(week|month|year|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
         r"\b\d{1,2}[:/]\d{1,2}(?:[:/]\d{2,4})?\b",  # Time formats
         r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b",  # Date formats
-        r"\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}\b",
+        r"\b(january|february|march|april|may|june|july|august|september|october"
+        r"|november|december)\s+\d{1,2}\b",
         r"\bin\s+\d+\s+(minutes?|hours?|days?|weeks?|months?)\b",
         r"\b(due|expires?|deadline)\s+\w+\b",
         r"\b(before|after|by)\s+\d+[ap]m\b",
@@ -67,7 +69,8 @@ class EmailExtractor:
     # Contact information patterns
     CONTACT_PATTERNS = {
         "phone": [
-            r"\b(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b",
+            r"\b(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?"
+            r"([0-9]{4})\b",
             r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b",
         ],
         "email": [
@@ -81,7 +84,8 @@ class EmailExtractor:
 
     # Action word patterns
     ACTION_PATTERNS = [
-        r"\b(please\s+)?(do|send|provide|submit|complete|finish|review|approve|confirm|schedule|call|email|respond|reply)\b",
+        r"\b(please\s+)?(do|send|provide|submit|complete|finish|review|approve|"
+        r"confirm|schedule|call|email|respond|reply)\b",
         r"\b(need|require|must|should|have\s+to)\b",
         r"\b(can\s+you|could\s+you|would\s+you)\b",
         r"\b(let\s+me\s+know|keep\s+me\s+posted|update\s+me)\b",
@@ -90,12 +94,14 @@ class EmailExtractor:
     # Sentiment indicators
     SENTIMENT_PATTERNS = {
         "positive": [
-            r"\b(thank|thanks|appreciate|excellent|great|wonderful|perfect|good\s+news)\b",
+            r"\b(thank|thanks|appreciate|excellent|great|wonderful|perfect|"
+            r"good\s+news)\b",
             r"\b(congratulations|well\s+done|good\s+job)\b",
             r"[😊😃😄😁🙂👍✅]",  # Positive emojis
         ],
         "negative": [
-            r"\b(sorry|apologize|unfortunately|problem|issue|error|mistake|wrong|failed?)\b",
+            r"\b(sorry|apologize|unfortunately|problem|issue|error|mistake|wrong|"
+            r"failed?)\b",
             r"\b(concerned|worried|frustrated|disappointed|upset)\b",
             r"[😞😟😢😠😡❌]",  # Negative emojis
         ],
@@ -111,7 +117,7 @@ class EmailExtractor:
 
     def _compile_patterns(self) -> Dict[str, Any]:
         """Pre-compile regex patterns for better performance"""
-        compiled = {}
+        compiled: Dict[str, Any] = {}
 
         # Compile urgency patterns
         compiled["urgency"] = {}
@@ -164,7 +170,7 @@ class EmailExtractor:
 
     def extract_urgency_indicators(self, text: str) -> Dict[str, List[str]]:
         """Extract urgency indicators from text"""
-        indicators = {"high": [], "medium": [], "low": []}
+        indicators: Dict[str, List[str]] = {"high": [], "medium": [], "low": []}
 
         for level, patterns in self.compiled_patterns["urgency"].items():
             for pattern in patterns:
@@ -203,7 +209,7 @@ class EmailExtractor:
 
     def extract_contact_info(self, text: str) -> Dict[str, List[str]]:
         """Extract contact information from text"""
-        contact_info = {"phone": [], "email": [], "url": []}
+        contact_info: Dict[str, List[str]] = {"phone": [], "email": [], "url": []}
 
         for contact_type, patterns in self.compiled_patterns["contact"].items():
             for pattern in patterns:
@@ -232,7 +238,8 @@ class EmailExtractor:
             matches = pattern.findall(text)
             for match in matches:
                 if isinstance(match, tuple):
-                    # Take the second group (action word) or first non-empty group
+                    # Take the second group (action word) or first non-empty
+                    # group
                     if len(match) > 1 and match[1]:
                         match_str = match[1]
                     else:
@@ -247,7 +254,11 @@ class EmailExtractor:
 
     def extract_sentiment_indicators(self, text: str) -> Dict[str, List[str]]:
         """Extract sentiment indicators"""
-        sentiment = {"positive": [], "negative": [], "neutral": []}
+        sentiment: Dict[str, List[str]] = {
+            "positive": [],
+            "negative": [],
+            "neutral": [],
+        }
 
         for sentiment_type, patterns in self.compiled_patterns["sentiment"].items():
             for pattern in patterns:
@@ -324,7 +335,8 @@ class EmailExtractor:
             links=links,
             action_words=action_words,
             sentiment_indicators=sentiment_indicators,
-            priority_keywords=list(set(priority_keywords)),  # Remove duplicates
+            priority_keywords=list(set(priority_keywords)),
+            # Remove duplicates
         )
 
 

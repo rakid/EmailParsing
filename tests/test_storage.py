@@ -411,7 +411,10 @@ class TestStorageIntegration:
                 **{
                     **sample_email_data,
                     "message_id": f"memory-test-{i}",
-                    "text_body": f"This is email number {i} with some content to test memory usage.",
+                    "text_body": (
+                        f"This is email number {i} with some content to test "
+                        f"memory usage."
+                    ),
                 }
             )
             processed_email = ProcessedEmail(

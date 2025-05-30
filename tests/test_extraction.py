@@ -123,7 +123,10 @@ class TestEmailExtractor:
         """Test contact information extraction"""
         extractor = EmailExtractor()
 
-        text_with_contacts = "Call me at 555-123-4567 or email john@example.com. Visit https://example.com"
+        text_with_contacts = (
+            "Call me at 555-123-4567 or email john@example.com. "
+            "Visit https://example.com"
+        )
         contact_info = extractor.extract_contact_info(text_with_contacts)
 
         assert "phone" in contact_info

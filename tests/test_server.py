@@ -38,7 +38,8 @@ class TestServerInitialization:
     def test_server_metadata(self):
         """Test server metadata configuration"""
         # Note: We can't directly test server.name/version without running the server
-        # but we can verify the server instance exists and has the right structure
+        # but we can verify the server instance exists and has the right
+        # structure
         assert server.server is not None
 
 
@@ -110,7 +111,12 @@ class TestResourceHandling:
         print(f"TEST: Server result type: {type(result)}")
         if isinstance(result, str):
             data = json.loads(result)
-            print(f"TEST: Server total_count: {data.get('total_count', 'NOT FOUND')}")
+            print(
+                f"TEST: Server total_count: {
+                    data.get(
+                        'total_count',
+                        'NOT FOUND')}"
+            )
 
         assert isinstance(result, str)
         data = json.loads(result)
@@ -435,7 +441,8 @@ class TestToolHandling:
                     **sample_email_data,
                     "message_id": email_id,
                     "subject": subject,
-                    "text_body": text_body,  # Use specific text body without conflicting content
+                    "text_body": text_body,  # Use specific text body without
+                    # conflicting content
                 }
             )
             processed_email = ProcessedEmail(

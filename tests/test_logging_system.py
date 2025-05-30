@@ -196,7 +196,7 @@ class TestEmailProcessingLogger:
         with patch(
             "src.logging_system.importlib.import_module", side_effect=ImportError
         ):
-            with tempfile.TemporaryDirectory() as temp_dir:
+            with tempfile.TemporaryDirectory():
                 logger = EmailProcessingLogger("test-file")
                 # Just test that it doesn't crash
                 logger.setup_file_logging()

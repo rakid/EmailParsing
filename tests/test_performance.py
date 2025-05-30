@@ -52,7 +52,11 @@ class TestEmailProcessingPerformance:
             from_email="urgent@example.com",
             to_emails=["recipient@example.com"],
             subject="URGENT: Critical system failure - immediate action required",
-            text_body="This is an urgent message that requires immediate attention. Please respond ASAP as the system is down and customers are affected. We need to fix this today before the deadline.",
+            text_body=(
+                "This is an urgent message that requires immediate attention. "
+                "Please respond ASAP as the system is down and customers are affected. "
+                "We need to fix this today before the deadline."
+            ),
             html_body="<p>This is an <strong>urgent</strong> message...</p>",
             message_id="test-urgent-001",
             received_at="2025-05-28T10:30:00Z",
@@ -88,7 +92,9 @@ class TestEmailProcessingPerformance:
                 from_email=f"sender{i}@example.com",
                 to_emails=[f"recipient{i}@example.com"],
                 subject=f"Test Email {i} - {'URGENT' if i % 3 == 0 else 'Normal'}",
-                text_body=f"Email content {i} with {'urgent deadline' if i % 3 == 0 else 'regular'} information.",
+                text_body=f"Email content {i} with {
+                    'urgent deadline' if i %
+                    3 == 0 else 'regular'} information.",
                 message_id=f"test-batch-{i:03d}",
                 received_at="2025-05-28T10:30:00Z",
             )
@@ -115,7 +121,8 @@ class TestEmailProcessingPerformance:
         print(f"Average time per email in batch: {avg_time_per_email:.4f}s")
         assert (
             avg_time_per_email < 2.0
-        ), f"Average processing time {avg_time_per_email:.4f}s exceeds 2s limit"
+        ), f"Average processing time {
+            avg_time_per_email:.4f}s exceeds 2s limit"
 
     def test_mcp_tool_response_time(self, benchmark, sample_email_data):
         """Test MCP tool response times."""
@@ -491,7 +498,8 @@ class TestScalabilityLimits:
         # Verify processing completed within time limit
         assert (
             processing_time < 2.0
-        ), f"Large content processing time {processing_time:.4f}s exceeds 2s limit"
+        ), f"Large content processing time {
+            processing_time:.4f}s exceeds 2s limit"
         assert extracted_metadata is not None, "Analysis failed for large content"
 
     def test_storage_capacity_limits(self):
@@ -548,4 +556,7 @@ class TestScalabilityLimits:
         )
 
         assert retrieved_emails > 0, "Failed to retrieve any emails"
-        assert retrieval_time < 1.0, f"Retrieval time {retrieval_time:.4f}s is too high"
+        assert (
+            retrieval_time < 1.0
+        ), f"Retrieval time {
+            retrieval_time:.4f}s is too high"
