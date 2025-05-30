@@ -23,7 +23,7 @@ class TestServerConfig:
         assert test_config.server_version == "0.1.0"
         assert test_config.environment == "development"
         assert test_config.debug is True
-        assert test_config.log_level == "INFO"  # From .env file
+        assert test_config.log_level == "DEBUG"
 
     @patch.dict(
         os.environ,
