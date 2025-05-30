@@ -1,14 +1,12 @@
 """Unit tests for config.py - Configuration Management"""
 
 import os
-import tempfile
-import asyncio
-from unittest.mock import patch, MagicMock
 from contextlib import asynccontextmanager
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.config import ServerConfig, lifespan_manager, shutdown_event, config
+from src.config import ServerConfig, lifespan_manager, shutdown_event
 
 
 class TestServerConfig:

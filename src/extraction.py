@@ -187,6 +187,14 @@ class EmailExtractor:
                             match_str = str(match)
                         indicators[level].append(match_str.lower().strip())
 
+                        # Early termination for performance - limit to 20 matches per level
+                        if len(indicators[level]) >= 20:
+                            break
+
+                # Stop processing more patterns if we have enough high urgency indicators
+                if level == "high" and len(indicators[level]) >= 10:
+                    break
+
         return indicators
 
     def extract_temporal_references(self, text: str) -> List[str]:
@@ -204,6 +212,13 @@ class EmailExtractor:
                 else:
                     match_str = str(match)
                 references.append(match_str.lower().strip())
+
+                # Early termination for performance - limit to 15 temporal references
+                if len(references) >= 15:
+                    break
+
+            if len(references) >= 15:
+                break
 
         return list(set(references))  # Remove duplicates
 
@@ -224,9 +239,19 @@ class EmailExtractor:
                             )
                         else:
                             formatted_phones.append(match)
+
+                        # Early termination for performance - limit to 10 phone numbers
+                        if len(formatted_phones) >= 10:
+                            break
                     contact_info[contact_type].extend(formatted_phones)
                 else:
-                    contact_info[contact_type].extend(matches)
+                    # Limit other contact types too
+                    limited_matches = matches[:10] if len(matches) > 10 else matches
+                    contact_info[contact_type].extend(limited_matches)
+
+                # Stop if we have enough matches for this contact type
+                if len(contact_info[contact_type]) >= 10:
+                    break
 
         return contact_info
 
@@ -250,6 +275,13 @@ class EmailExtractor:
                     match_str = str(match)
                 actions.append(match_str.lower().strip())
 
+                # Early termination for performance - limit to 20 action words
+                if len(actions) >= 20:
+                    break
+
+            if len(actions) >= 20:
+                break
+
         return list(set(actions))
 
     def extract_sentiment_indicators(self, text: str) -> Dict[str, List[str]]:
@@ -272,6 +304,13 @@ class EmailExtractor:
                     else:
                         match_str = str(match)
                     sentiment[sentiment_type].append(match_str.lower().strip())
+
+                    # Early termination for performance - limit to 10 matches per sentiment type
+                    if len(sentiment[sentiment_type]) >= 10:
+                        break
+
+                if len(sentiment[sentiment_type]) >= 10:
+                    break
 
         return sentiment
 
@@ -310,14 +349,24 @@ class EmailExtractor:
         # Add subject line with extra weight
         text_content += f"{email_data.subject} " * 3
 
-        logger.info(f"Extracting metadata from email {email_data.message_id}")
+        # Optimize for large content - limit to first 10KB for regex processing
+        # Most important content is usually at the beginning
+        if len(text_content) > 10000:
+            # Take first 8KB and last 2KB to capture both intro and conclusion
+            text_for_analysis = text_content[:8000] + " " + text_content[-2000:]
+        else:
+            text_for_analysis = text_content
 
-        # Extract all metadata
-        urgency_indicators = self.extract_urgency_indicators(text_content)
-        temporal_references = self.extract_temporal_references(text_content)
-        contact_info = self.extract_contact_info(text_content)
-        action_words = self.extract_action_words(text_content)
-        sentiment_indicators = self.extract_sentiment_indicators(text_content)
+        logger.info(
+            f"Extracting metadata from email {email_data.message_id} (content size: {len(text_content)} chars)"
+        )
+
+        # Extract all metadata using optimized text
+        urgency_indicators = self.extract_urgency_indicators(text_for_analysis)
+        temporal_references = self.extract_temporal_references(text_for_analysis)
+        contact_info = self.extract_contact_info(text_for_analysis)
+        action_words = self.extract_action_words(text_for_analysis)
+        sentiment_indicators = self.extract_sentiment_indicators(text_for_analysis)
 
         # Extract priority keywords (combines urgency and action words)
         priority_keywords = []

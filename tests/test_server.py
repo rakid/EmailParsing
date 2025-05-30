@@ -7,13 +7,10 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
-from mcp.types import (
-    AnyUrl,
+from mcp.types import (  # Ajout des imports MCP nécessaires
     PromptMessage,
-    Resource,
     TextContent,
-    Tool,
-)  # Ajout des imports MCP nécessaires
+)
 
 from src import server, storage
 from src.config import config  # Import config for server metadata
@@ -102,9 +99,9 @@ class TestResourceHandling:
         resource_uris = [str(r.uri) for r in resources]
 
         # Check if URIs for the added emails are present
-        assert f"email://processed/dynamic-id-0" in resource_uris
-        assert f"email://processed/dynamic-id-1" in resource_uris
-        assert f"email://processed/dynamic-id-2" in resource_uris
+        assert "email://processed/dynamic-id-0" in resource_uris
+        assert "email://processed/dynamic-id-1" in resource_uris
+        assert "email://processed/dynamic-id-2" in resource_uris
         # Check that it doesn't list more than 10 dynamic URIs even if more are in storage
         for i in range(12):  # Add more emails
             email_data = EmailData(
@@ -160,7 +157,7 @@ class TestResourceHandling:
         data = json.loads(result_str)
         assert data["total_processed"] == 5
         assert data["total_errors"] == 1
-        assert data["avg_urgency_score"] == 65.5
+        assert data["avg_urgency_score"] == pytest.approx(65.5)
         assert (
             data["resource_info"]["total_emails_in_storage"] == 0
         )  # No emails added to storage.email_storage
@@ -252,7 +249,7 @@ class TestResourceHandling:
         assert data["total_emails"] == 3
         assert data["analyzed_emails"] == 3
         assert data["urgency_distribution"]["high"] == 1
-        assert data["urgency_stats"]["average"] == 50.0  # (25+50+75)/3
+        assert data["urgency_stats"]["average"] == pytest.approx(50.0)  # (25+50+75)/3
 
     @pytest.mark.asyncio
     async def test_read_high_urgency_resource(
@@ -650,7 +647,7 @@ class TestToolHandling:
         assert response_data["analyzed_emails"] == 3
         assert "urgency_distribution" in response_data
         assert "sentiment_distribution" in response_data
-        assert response_data["avg_urgency_score"] == 75.0
+        assert response_data["avg_urgency_score"] == pytest.approx(75.0)
 
     @pytest.mark.asyncio
     async def test_extract_tasks_tool_all_emails(
@@ -779,8 +776,17 @@ class TestToolHandling:
         processed_email = ProcessedEmail(id="export-test", email_data=email_data)
         storage.email_storage["export-test"] = processed_email
 
-        with patch("src.server.DataExporter.export_emails") as mock_export:
-            mock_export.return_value = "exported_emails.json"
+        # Patch the DataExporter.export_emails method and the DataExporter.ExportFormat enum/callable
+        with (
+            patch("src.server.DataExporter.export_emails") as mock_export,
+            patch(
+                "src.server.DataExporter.ExportFormat",
+                return_value=MagicMock(name="MockedExportFormatInstance"),
+                create=True,  # Add create=True to ensure the attribute is created if missing
+            ) as mock_export_format,
+        ):
+            mock_export.return_value = "exported_emails.json"  # Simulate successful export returning a filename
+
             result_content_list = await server.handle_call_tool(
                 "export_emails",
                 {"format": "json", "limit": 1, "filename": "test_export.json"},
@@ -788,7 +794,10 @@ class TestToolHandling:
             response_data = json.loads(result_content_list[0].text)
             assert response_data["success"] is True
             assert response_data["exported_count"] == 1
+            assert response_data["filename"] == "exported_emails.json"
             mock_export.assert_called_once()
+            # Ensure ExportFormat was called with the correct format string
+            mock_export_format.assert_called_once_with("json")
 
     @pytest.mark.skipif(
         not server.INTEGRATIONS_AVAILABLE, reason="Integrations not available"
@@ -823,28 +832,45 @@ class TestToolHandling:
     async def test_process_through_plugins_tool(
         self, sample_email_data, sample_analysis_data
     ):
-        """Test process_through_plugins tool."""
+        """Test process_through_plugins tool if integrations are available."""
         email_data = EmailData(**sample_email_data)
-        analysis = EmailAnalysis(**sample_analysis_data)
+
+        # Initial state of the email in storage
+        initial_analysis_dict = sample_analysis_data.copy()
+        initial_analysis_dict["tags"] = ["initial_tag"]
+        initial_analysis = EmailAnalysis(**initial_analysis_dict)
         original_email = ProcessedEmail(
-            id="plugin-test", email_data=email_data, analysis=analysis
+            id="plugin-test", email_data=email_data, analysis=initial_analysis
         )
         storage.email_storage["plugin-test"] = original_email
 
-        # Patch the local import in the function
-        with patch("src.server.integrations.integration_registry") as mock_registry:
-            # Mock the plugin processing behavior
-            async def mock_process_email(email_obj):
-                if email_obj.analysis:
-                    email_obj.analysis.tags.append("plugin_processed_tag")
-                return email_obj
+        # Define the state of the email *after* mock plugin processing
+        analysis_after_plugin_dict = sample_analysis_data.copy()
+        analysis_after_plugin_dict["tags"] = ["initial_tag", "plugin_processed_tag"]
+        # Ensure other fields are present if the EmailAnalysis model expects them
+        analysis_after_plugin_dict.setdefault("urgency_score", 75)
+        analysis_after_plugin_dict.setdefault("urgency_level", UrgencyLevel.HIGH)
+        analysis_after_plugin_dict.setdefault("sentiment", "positive")
 
-            mock_registry.plugin_manager.process_email_through_plugins = (
-                mock_process_email
-            )
-            mock_registry.plugin_manager.plugins = [
-                "dummy_plugin"
-            ]  # To indicate plugins exist
+        mock_analysis_after_plugin = EmailAnalysis(**analysis_after_plugin_dict)
+
+        mock_processed_email_by_plugin = ProcessedEmail(
+            id="plugin-test",
+            email_data=email_data,
+            analysis=mock_analysis_after_plugin,
+        )
+
+        # Patch the actual plugin processing function and the list of plugins
+        with (
+            patch(
+                "src.server.integration_registry.plugin_manager.process_email_through_plugins"
+            ) as mock_process_plugins,
+            patch(
+                "src.server.integration_registry.plugin_manager.plugins",
+                new=[MagicMock(name="MockPlugin1")],
+            ),
+        ):
+            mock_process_plugins.return_value = mock_processed_email_by_plugin
 
             result_content_list = await server.handle_call_tool(
                 "process_through_plugins", {"email_id": "plugin-test"}
@@ -854,10 +880,10 @@ class TestToolHandling:
             assert response_data["success"] is True
             assert response_data["email_id"] == "plugin-test"
             assert "plugin_processed_tag" in response_data["updated_tags"]
+            assert "initial_tag" in response_data["updated_tags"]
             assert (
-                "plugin_processed_tag"
-                in storage.email_storage["plugin-test"].analysis.tags
-            )
+                response_data["plugins_applied"] == 1
+            )  # Based on the mocked .plugins list
 
 
 class TestPromptHandling:

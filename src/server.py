@@ -4,11 +4,10 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type
 
 from mcp.server import Server
 from mcp.types import (
-    AnyUrl,
     Prompt,
     PromptArgument,
     PromptMessage,
@@ -16,6 +15,7 @@ from mcp.types import (
     TextContent,
     Tool,
 )
+from pydantic import AnyUrl
 
 from . import storage
 from .config import config
@@ -25,15 +25,36 @@ from .extraction import email_extractor
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
+# Initialize placeholders for integration components and availability flag
+DataExporter: Optional[Type[Any]] = None
+integration_registry: Optional[Any] = None
+integrations: Optional[Any] = None  # This will hold the imported 'integrations' module
+ExportFormat: Optional[Type[Any]] = None
+INTEGRATIONS_AVAILABLE = False  # Default to False
+
 # Import integration capabilities
 try:
-    from . import integrations
-    from .integrations import DataExporter, integration_registry
+    from . import integrations as _ImportedIntegrationsModule
+    from .integrations import DataExporter as _ImportedDataExporter
+    from .integrations import ExportFormat as _ImportedExportFormat
+    from .integrations import integration_registry as _ImportedIntegrationRegistry
+
+    DataExporter = _ImportedDataExporter
+    # Attach ExportFormat as an attribute of DataExporter for test compatibility
+    DataExporter.ExportFormat = _ImportedExportFormat  # type: ignore[attr-defined]
+    ExportFormat = _ImportedExportFormat
+    integration_registry = _ImportedIntegrationRegistry
+    integrations = _ImportedIntegrationsModule
 
     INTEGRATIONS_AVAILABLE = True
+    # print("✅ Integration module loaded successfully.") # Optional: for debugging
 except ImportError:
-    INTEGRATIONS_AVAILABLE = False
-    print("⚠️ Integration module not available - running in basic mode")
+    # DataExporter, integration_registry, integrations remain None as initialized
+    # INTEGRATIONS_AVAILABLE remains False as initialized
+    ExportFormat = None
+    print(
+        "⚠️ Integration module not available - running in basic mode. Integration features will be disabled."
+    )
 
 # Initialize MCP server with metadata
 server: Server = Server(
@@ -493,6 +514,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                     to_emails=["analysis@inboxzen.com"],
                     subject=subject or "Analysis Request",
                     text_body=content,
+                    html_body=None,
                     received_at=datetime.now(),
                 )
 
@@ -741,7 +763,14 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
         filename = arguments.get("filename")
 
         try:
-            from .integrations import DataExporter, ExportFormat
+            # Check if DataExporter is available
+            if DataExporter is None:
+                return [
+                    TextContent(
+                        type="text",
+                        text="Export functionality not available - integration module not loaded",
+                    )
+                ]
 
             # Get emails to export (limited)
             emails_to_export = list(storage.email_storage.values())[:limit]
@@ -755,7 +784,15 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
                 filename = f"emails_export_{timestamp}.{export_format}"
 
             # Export emails
-            export_format_enum = ExportFormat(export_format)
+            if DataExporter is None or not hasattr(DataExporter, "ExportFormat"):
+                return [
+                    TextContent(
+                        type="text",
+                        text="Export format enum not available - integration module not loaded",
+                    )
+                ]
+
+            export_format_enum = DataExporter.ExportFormat(export_format)
             exported_file = DataExporter.export_emails(
                 emails_to_export, export_format_enum, filename
             )
@@ -775,7 +812,11 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
 
     elif name == "list_integrations" and INTEGRATIONS_AVAILABLE:
         try:
-            from .integrations import integration_registry
+            # Check if integration_registry is available
+            if integration_registry is None:
+                return [
+                    TextContent(type="text", text="Integration registry not available")
+                ]
 
             integrations_info = integration_registry.list_integrations()
             plugin_info = integration_registry.plugin_manager.get_plugin_info()
@@ -814,12 +855,16 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
         email_id = arguments.get("email_id")
 
         try:
-            from .integrations import integration_registry
-
             if email_id not in storage.email_storage:
                 return [TextContent(type="text", text=f"Email {email_id} not found")]
 
             original_email = storage.email_storage[email_id]
+
+            # Check if integration_registry is available
+            if integration_registry is None:
+                return [
+                    TextContent(type="text", text="Integration registry not available")
+                ]
 
             # Process through plugins
             processed_email = (

@@ -2,21 +2,21 @@
 
 import hashlib
 import hmac
-import json
 import os
 import sys
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from pydantic import ValidationError as PydanticValidationError
 
 from src import storage
 from src.config import config as app_config
+
+# Importation directe de webhook_email_extractor n'est pas nécessaire ici si on mock src.webhook.email_extractor
+from src.extraction import ExtractedMetadata
 from src.models import (
-    AttachmentData,
     EmailAnalysis,
     EmailData,
     EmailStatus,
@@ -25,19 +25,15 @@ from src.models import (
     UrgencyLevel,
 )
 from src.webhook import (
-    app,
-    extract_email_data,
-    verify_webhook_signature,
-    _ensure_webhook_is_authentic,
-    _determine_sentiment,
     _create_email_analysis,
-    _update_stats,
+    _determine_sentiment,
+    _ensure_webhook_is_authentic,
     _process_through_plugins,
     _save_to_database,
+    _update_stats,
+    extract_email_data,
+    verify_webhook_signature,
 )
-
-# Importation directe de webhook_email_extractor n'est pas nécessaire ici si on mock src.webhook.email_extractor
-from src.extraction import ExtractedMetadata
 
 
 @pytest.fixture(autouse=True)
@@ -488,6 +484,7 @@ def test_main_block_runs_uvicorn(mock_logger_main, mock_uvicorn_run):
 def test_api_routes_import_failure(mock_logger_warning, client):
     """Test logger warning when api_routes cannot be imported."""
     import importlib
+
     from src import webhook  # Import it here to see if the warning is logged
 
     # To ensure the try-except block for api_router import is hit upon reload

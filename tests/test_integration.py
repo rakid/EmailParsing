@@ -6,38 +6,37 @@ and real-world scenarios.
 
 import json
 import os
-import asyncio  # Added for async plugin tests
 
 # Import MCP and server components
 import sys
 import time
-from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src import server  # MCP Server module
 from src import storage
-from src.models import (
-    ProcessedEmail,
-    UrgencyLevel,
-    EmailData,
-    EmailAnalysis,
-    EmailStatus,
-)  # Added EmailStatus
-from src.webhook import app as webhook_app  # FastAPI app instance
+from src.integrations import DatabaseFormat  # Added DatabaseFormat
+from src.integrations import DataExporter  # Added DataExporter
+from src.integrations import ExportFormat  # Added ExportFormat
+from src.integrations import PluginInterface  # Added PluginInterface for example plugin
+from src.integrations import PluginManager  # Added PluginManager
 from src.integrations import (
     AIAnalysisFormat,
-    SQLiteInterface,
-    PostgreSQLInterface,
     DatabaseInterface,
-    DatabaseFormat,  # Added DatabaseFormat
-    PluginManager,  # Added PluginManager
-    PluginInterface,  # Added PluginInterface for example plugin
-    ExportFormat,  # Added ExportFormat
-    DataExporter,  # Added DataExporter
+    PostgreSQLInterface,
+    SQLiteInterface,
 )
+from src.models import (  # Added EmailStatus
+    EmailAnalysis,
+    EmailData,
+    EmailStatus,
+    ProcessedEmail,
+    UrgencyLevel,
+)
+from src.webhook import app as webhook_app  # FastAPI app instance
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
