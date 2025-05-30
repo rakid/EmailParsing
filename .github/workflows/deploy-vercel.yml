@@ -142,8 +142,23 @@ jobs:
         id: deploy
         run: |
           DEPLOYMENT_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
-          echo "deployment_url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
-          echo "Deployed to: $DEPLOYMENT_URL"
+
+          # Extract the deployment source URL (without https://)
+          DEPLOYMENT_SOURCE=$(echo "$DEPLOYMENT_URL" | sed 's|https://||')
+
+          # Get the alias URL by searching for the matching source
+          echo "Fetching alias information for deployment: $DEPLOYMENT_SOURCE"
+          ALIAS_URL=$(vercel alias ls --token=${{ secrets.VERCEL_TOKEN }} | grep "$DEPLOYMENT_SOURCE" | awk '{print $2}' | head -1)
+
+          if [ ! -z "$ALIAS_URL" ] && [ "$ALIAS_URL" != "$DEPLOYMENT_SOURCE" ]; then
+            echo "deployment_url=https://$ALIAS_URL" >> $GITHUB_OUTPUT
+            echo "Deployed to: $DEPLOYMENT_URL"
+            echo "Available at alias: https://$ALIAS_URL"
+          else
+            echo "No alias found for this deployment, using deployment URL"
+            echo "deployment_url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+            echo "Deployed to: $DEPLOYMENT_URL"
+          fi
 
       - name: Test Deployment
         run: |
