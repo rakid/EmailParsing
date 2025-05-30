@@ -372,10 +372,7 @@ class OpenAIInterface(AIAnalysisInterface):
         """Fine-tune model with training data"""
         # Implementation would use OpenAI fine-tuning API
         # For now, just log the training request
-        print(
-            f"Training request for {
-                len(training_data)} samples (placeholder)"
-        )
+        print(f"Training request for {len(training_data)} samples (placeholder)")
 
 
 # ============================================================================

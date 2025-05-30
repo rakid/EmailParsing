@@ -722,8 +722,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [
                 TextContent(
                     type="text",
-                    text=f"Task extraction error: {
-                        str(e)}",
+                    text=f"Task extraction error: {str(e)}",
                 )
             ]
 

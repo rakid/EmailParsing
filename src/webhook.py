@@ -192,9 +192,8 @@ async def _process_through_plugins(
 
     try:
         logger.info(
-            f"Processing email {processing_id} through {
-                len(
-                    integration_registry.plugin_manager.plugins)} plugins"
+            f"Processing email {processing_id} through "
+            f"{len(integration_registry.plugin_manager.plugins)} plugins"
         )
         enhanced_email = (
             await integration_registry.plugin_manager.process_email_through_plugins(

@@ -151,10 +151,7 @@ class EmailProcessingLogger:
 
                 file_handler.setLevel(self.logger.level)
                 self.logger.addHandler(file_handler)
-                self.logger.info(
-                    f"File logging enabled: {
-                        config.log_file_path}"
-                )
+                self.logger.info(f"File logging enabled: {config.log_file_path}")
         except ImportError:
             # Config not available, skip file logging
             pass
