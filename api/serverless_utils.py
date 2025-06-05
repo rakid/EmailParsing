@@ -2,11 +2,11 @@
 Serverless optimization utilities for Vercel deployment
 """
 
+import asyncio
 import functools
 import os
 import sys
 import time
-from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -42,7 +42,7 @@ class ServerlessOptimizer:
         """Simple result caching for serverless functions"""
 
         def decorator(func: Callable) -> Callable:
-            cache = {}
+            cache: Dict[str, tuple[Any, float]] = {}
 
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
@@ -173,7 +173,7 @@ serverless_storage = ServerlessStorage() if IS_SERVERLESS else None
 # Environment-specific configuration
 def get_serverless_config() -> Dict[str, Any]:
     """Get configuration optimized for serverless environment"""
-    config = {
+    config: Dict[str, Any] = {
         "max_memory_mb": 128,  # Vercel default
         "max_execution_time": 30,  # Vercel default
         "enable_caching": True,

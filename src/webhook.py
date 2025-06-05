@@ -20,6 +20,7 @@ from typing import (
     Optional,
 )
 
+from dateutil.parser import parse as dateutil_parse
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -120,6 +121,26 @@ def extract_email_data(
     ]
     headers = {header["Name"]: header["Value"] for header in webhook_payload.Headers}
 
+    # Modification ici pour le parsing de la date
+    try:
+        # Utiliser dateutil.parser.parse pour plus de flexibilité
+        parsed_date = dateutil_parse(webhook_payload.Date)
+        # S'assurer que la date est consciente du fuseau horaire et convertie en UTC
+        if parsed_date.tzinfo is None:
+            received_at_utc = parsed_date.replace(tzinfo=timezone.utc)
+        else:
+            received_at_utc = parsed_date.astimezone(timezone.utc)
+    except (ValueError, TypeError) as e:
+        logger.error(f"Failed to parse date string '{webhook_payload.Date}': {e}")
+        # Fallback ou lever une erreur plus spécifique si nécessaire
+        # Pour l'instant, on utilise datetime.now() comme fallback avec un avertissement
+        logger.warning(
+            "Using current UTC time as fallback for received_at due to parsing error."
+        )
+        raise ValueError(
+            f"Invalid date format in Postmark payload: '{webhook_payload.Date}'"
+        ) from e
+
     return EmailData(
         message_id=webhook_payload.MessageID,
         from_email=webhook_payload.From,
@@ -129,7 +150,7 @@ def extract_email_data(
         subject=webhook_payload.Subject,
         text_body=webhook_payload.TextBody,
         html_body=webhook_payload.HtmlBody,
-        received_at=datetime.fromisoformat(webhook_payload.Date.replace("Z", "+00:00")),
+        received_at=received_at_utc,
         attachments=attachments,
         headers=headers,
     )
@@ -239,8 +260,8 @@ async def _save_to_database(
         try:
             await db_interface.store_email(processed_email)
             logger.info(
-                f"Email {processing_id} saved to database via {
-                    db_interface.__class__.__name__}"
+                f"Email {processing_id} saved to database via "
+                f"{db_interface.__class__.__name__}"
             )
         except Exception as e:
             logger.error(
@@ -398,6 +419,7 @@ async def detailed_health_check():
         "emails_processed_in_memory": (
             storage.stats.total_processed
         ),  # Clarify in-memory
+        "tests": "0.0.2",
         "errors_logged": storage.stats.total_errors,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

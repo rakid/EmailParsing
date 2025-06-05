@@ -65,8 +65,8 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
-# Scrapy stuff:
-.scrapy
+# Trunk stuff:
+.trunk
 
 # Sphinx documentation
 docs/_build/
@@ -186,7 +186,6 @@ benchmark_results/
 
 # Test and development artifacts
 debug_*.py
-test_*.py
 simple_*.py
 comprehensive_*.py
 create_test_data.py
@@ -209,3 +208,4 @@ setup_integrations.py
 ehthumbs.db
 Thumbs.db
 .vercel
+.env*.local

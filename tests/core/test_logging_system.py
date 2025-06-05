@@ -149,6 +149,41 @@ class TestColoredFormatter:
         formatted = self.formatter.format(record)
         assert "CUSTOM" in formatted
 
+    def test_colored_formatter_basic(self):
+        """Test ColoredFormatter basic functionality"""
+        formatter = ColoredFormatter()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.INFO,
+            pathname="/test/path.py",
+            lineno=42,
+            msg="Test message",
+            args=(),
+            exc_info=None,
+        )
+
+        result = formatter.format(record)
+        # Should contain the message and ANSI color codes for INFO level
+        assert "Test message" in result
+        assert "\033[" in result  # ANSI escape sequence
+
+    def test_colored_formatter_error_level(self):
+        """Test ColoredFormatter with ERROR level"""
+        formatter = ColoredFormatter()
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.ERROR,
+            pathname="/test/path.py",
+            lineno=42,
+            msg="Error message",
+            args=(),
+            exc_info=None,
+        )
+
+        result = formatter.format(record)
+        assert "Error message" in result
+        assert "\033[" in result  # Should have color formatting
+
 
 class TestEmailProcessingLogger:
     """Test EmailProcessingLogger functionality"""
@@ -542,3 +577,56 @@ class TestGlobalLogger:
         with patch.object(global_logger.logger, "info") as mock_info:
             global_logger.info("Test global logging")
             mock_info.assert_called_once_with("Test global logging")
+
+    def test_log_performance_decorator(self):
+        """Test log_performance decorator"""
+
+        @log_performance("test_operation")
+        def test_function():
+            return "test_result"
+
+        with patch.object(global_logger.logger, "info") as mock_info:
+            result = test_function()
+            assert result == "test_result"
+            # Should log performance info
+            assert mock_info.called
+
+    def test_log_performance_decorator_with_exception(self):
+        """Test log_performance decorator with exception"""
+
+        @log_performance("test_operation")
+        def failing_function():
+            raise ValueError("Test error")
+
+        with patch.object(global_logger.logger, "error") as mock_error:
+            with pytest.raises(ValueError):
+                failing_function()
+            # Should log the error
+            assert mock_error.called
+
+    def test_email_processing_logger_auth_event(self):
+        """Test EmailProcessingLogger auth event logging"""
+        logger = EmailProcessingLogger()
+
+        with patch.object(logger.logger, "info") as mock_info:
+            logger.info(
+                "User authentication",
+                extra={"event_type": "auth", "user_id": "user123", "success": True},
+            )
+            mock_info.assert_called_once()
+
+    def test_email_processing_logger_api_call(self):
+        """Test EmailProcessingLogger API call logging"""
+        logger = EmailProcessingLogger()
+
+        with patch.object(logger.logger, "info") as mock_info:
+            logger.info(
+                "API call",
+                extra={
+                    "endpoint": "/api/emails",
+                    "method": "GET",
+                    "status_code": 200,
+                    "response_time": 150,
+                },
+            )
+            mock_info.assert_called_once()

@@ -104,15 +104,15 @@ class EmailProcessingLogger:
         else:
             # Standard format with colors if enabled
             if enable_colors:
+                # Simple format for ColoredFormatter
+                # (it will apply colors automatically)
                 format_string = (
-                    "\033[36m%(asctime)s\033[0m - "  # Cyan timestamp
-                    "\033[35m%(name)s\033[0m - "  # Magenta logger name
-                    # Colored level
-                    "%(levelname_color)s%(levelname)s\033[0m - "
-                    "%(message)s"
+                    "%(asctime)s - %(name)s - " "%(levelname)s - %(message)s"
                 )
             else:
-                format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                format_string = (
+                    "%(asctime)s - %(name)s - " "%(levelname)s - %(message)s"
+                )
 
             console_handler.setFormatter(ColoredFormatter(format_string))
 
@@ -365,18 +365,28 @@ class ColoredFormatter(logging.Formatter):
     }
 
     def format(self, record):
-        # Add color to level name
-        if record.levelname in self.COLORS:
-            record.levelname_color = self.COLORS[record.levelname]
-        else:
-            record.levelname_color = ""
+        # Add levelname_color field to record for format string usage
+        color = self.COLORS.get(record.levelname, "")
+        record.levelname_color = color
 
-        return super().format(record)
+        # Format the message with parent formatter first
+        formatted = super().format(record)
+
+        # Apply color to the entire formatted message if no color field in format
+        if color and "%(levelname_color)s" not in self._fmt:
+            reset = "\033[0m"
+            formatted = f"{color}{formatted}{reset}"
+
+        return formatted
 
 
 # Performance tracking decorator
-def log_performance(logger_instance: EmailProcessingLogger):
-    """Decorator to log function performance"""
+def log_performance(param):
+    """Decorator to log function performance
+
+    Args:
+        param: Either a string (operation name) or EmailProcessingLogger instance
+    """
 
     def decorator(func):
         def wrapper(*args, **kwargs):
@@ -388,27 +398,63 @@ def log_performance(logger_instance: EmailProcessingLogger):
                 result = func(*args, **kwargs)
                 execution_time = time.time() - start_time
 
-                logger_instance.log_performance_metrics(
-                    {
-                        "function": func.__name__,
-                        "execution_time_ms": round(execution_time * 1000, 2),
-                        "success": True,
-                    }
-                )
+                # Determine if param is a logger instance or operation name
+                if isinstance(param, str):
+                    # New pattern: string parameter, use global logger
+                    operation_name = param
+                    logger.log_performance_metrics(
+                        {
+                            "function": func.__name__,
+                            "operation": operation_name,
+                            "execution_time_ms": round(execution_time * 1000, 2),
+                            "success": True,
+                        }
+                    )
+                else:
+                    # Old pattern: logger instance parameter
+                    logger_instance = param
+                    logger_instance.log_performance_metrics(
+                        {
+                            "function": func.__name__,
+                            "execution_time_ms": round(execution_time * 1000, 2),
+                            "success": True,
+                        }
+                    )
 
                 return result
 
             except Exception as e:
                 execution_time = time.time() - start_time
 
-                logger_instance.log_performance_metrics(
-                    {
-                        "function": func.__name__,
-                        "execution_time_ms": round(execution_time * 1000, 2),
-                        "success": False,
-                        "error": str(e),
-                    }
-                )
+                # Determine if param is a logger instance or operation name
+                if isinstance(param, str):
+                    # New pattern: string parameter, use global logger
+                    operation_name = param
+                    logger.logger.error(
+                        "Performance monitoring: %s failed after %dms",
+                        operation_name,
+                        round(execution_time * 1000, 2),
+                        extra={
+                            "event_type": "performance_metrics",
+                            "function": func.__name__,
+                            "operation": operation_name,
+                            "execution_time_ms": round(execution_time * 1000, 2),
+                            "success": False,
+                            "error": str(e),
+                        },
+                        exc_info=True,
+                    )
+                else:
+                    # Old pattern: logger instance parameter
+                    logger_instance = param
+                    logger_instance.log_performance_metrics(
+                        {
+                            "function": func.__name__,
+                            "execution_time_ms": round(execution_time * 1000, 2),
+                            "success": False,
+                            "error": str(e),
+                        }
+                    )
 
                 raise
 

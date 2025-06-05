@@ -12,6 +12,7 @@ import asyncio
 import gc
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 from unittest.mock import patch
 
@@ -19,7 +20,7 @@ import psutil
 
 from src import server
 from src.extraction import EmailExtractor
-from src.models import EmailData
+from src.models import EmailData, EmailStatus, ProcessedEmail
 from src.storage import email_storage, stats
 
 
@@ -42,6 +43,11 @@ class TestEmailProcessingPerformance:
         import src.webhook  # noqa: E402
 
         src.webhook.email_storage = email_storage
+
+        # Reset realtime interface to prevent test interference
+        from src.server import reset_realtime_interface
+
+        reset_realtime_interface()
 
     def test_single_email_processing_time(self, benchmark, sample_postmark_payload):
         """Test that single email processing meets <2s requirement."""
@@ -195,6 +201,11 @@ class TestConcurrentProcessing:
 
         src.webhook.email_storage = email_storage
 
+        # Reset realtime interface to prevent test interference
+        from src.server import reset_realtime_interface
+
+        reset_realtime_interface()
+
     def test_concurrent_webhook_processing(self):
         """Test concurrent webhook processing with multiple threads."""
         extractor = EmailExtractor()
@@ -210,8 +221,11 @@ class TestConcurrentProcessing:
                     to_emails=["recipient@example.com"],
                     subject=f"Thread {thread_id} Email {i}",
                     text_body=f"Content from thread {thread_id}, email {i}",
+                    html_body="",  # Ajout du paramètre manquant
                     message_id=f"thread-{thread_id}-email-{i}",
-                    received_at="2025-05-28T10:30:00Z",
+                    received_at=datetime(2025, 5, 28, 10, 30, 0, tzinfo=timezone.utc),
+                    attachments=[],
+                    headers={},
                 )
 
                 start_time = time.time()
@@ -223,7 +237,13 @@ class TestConcurrentProcessing:
 
                 # Store in shared storage (testing thread safety)
                 email_id = f"thread-{thread_id}-{i}"
-                email_storage[email_id] = email_data
+                processed_email = ProcessedEmail(
+                    id=email_id,
+                    email_data=email_data,
+                    status=EmailStatus.RECEIVED,
+                    processed_at=datetime.now(timezone.utc),
+                )
+                email_storage[email_id] = processed_email
 
                 results.append(
                     {
@@ -350,6 +370,8 @@ class TestMemoryUsage:
         stats.avg_urgency_score = 0.0
         stats.last_processed = None
         stats.processing_times.clear()
+        # Reset realtime interface to prevent test interference
+        server.realtime_interface = None
 
         # Force garbage collection
         gc.collect()
@@ -465,6 +487,8 @@ class TestScalabilityLimits:
         stats.avg_urgency_score = 0.0
         stats.last_processed = None
         stats.processing_times.clear()
+        # Reset realtime interface to prevent test interference
+        server.realtime_interface = None
 
     def test_large_email_content_handling(self):
         """Test processing of very large email content."""

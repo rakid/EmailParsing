@@ -8,7 +8,8 @@ from fastapi import FastAPI  # Import FastAPI
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-from src.logging_system import logger  # Import logger
+# Import logger from logging_system
+from src.logging_system import logger
 
 # For graceful shutdown
 shutdown_event = asyncio.Event()
@@ -49,12 +50,19 @@ class ServerConfig(BaseSettings):
     max_processing_time: float = 2.0  # seconds
     enable_async_processing: bool = True
 
-    # Logging configuration - conditionally use environment variables based on environment
-    log_level: str = Field(default="DEBUG")
+    # Logging configuration - uses environment variables
+    # based on the current environment
+    log_level: str = Field(
+        default="DEBUG",
+        description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
     log_format: str = "text"  # "text" or "json"
     enable_console_colors: bool = True
     log_file_path: Optional[str] = None  # e.g., "logs/inbox-zen.log"
-    log_file_max_bytes: int = 10 * 1024 * 1024  # 10 MB
+    log_file_max_bytes: int = Field(
+        default=10 * 1024 * 1024,  # 10 MB
+        description="Maximum size of log file before rotation",
+    )
     log_file_backup_count: int = 5
 
     # Environment: "development" or "production"
