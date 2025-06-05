@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from postgrest.exceptions import APIError
+from supabase import Client, create_client
 
 from src.integrations import DatabaseInterface
 from src.models import (
@@ -21,7 +22,6 @@ from src.models import (
     ProcessedEmail,
     UrgencyLevel,
 )
-from supabase import Client, create_client
 
 from .config import SupabaseConfig
 
