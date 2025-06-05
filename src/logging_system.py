@@ -82,12 +82,10 @@ class EmailProcessingLogger:
 
             log_level = config.log_level.upper()
             log_format = config.log_format.lower()
-            enable_colors = config.enable_console_colors
         except ImportError:
             # Fallback configuration for testing
             log_level = "INFO"
             log_format = "standard"
-            enable_colors = True
 
         # Set logging level
         level = getattr(logging, log_level, logging.INFO)
@@ -103,16 +101,7 @@ class EmailProcessingLogger:
             console_handler.setFormatter(JSONFormatter())
         else:
             # Standard format with colors if enabled
-            if enable_colors:
-                # Simple format for ColoredFormatter
-                # (it will apply colors automatically)
-                format_string = (
-                    "%(asctime)s - %(name)s - " "%(levelname)s - %(message)s"
-                )
-            else:
-                format_string = (
-                    "%(asctime)s - %(name)s - " "%(levelname)s - %(message)s"
-                )
+            format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
             console_handler.setFormatter(ColoredFormatter(format_string))
 
@@ -173,6 +162,7 @@ class EmailProcessingLogger:
                 "text_body_length": len(email_data.text_body or ""),
                 "html_body_length": len(email_data.html_body or ""),
                 "webhook_source": "postmark",
+                "webook_payload_size": len(json.dumps(webhook_payload)),
             },
         )
 
