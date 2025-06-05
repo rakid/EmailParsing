@@ -481,6 +481,10 @@ class PluginManager:
             for name, plugin in self.plugins.items()
         }
 
+    def list_plugins(self) -> List[str]:
+        """List all registered plugin names"""
+        return list(self.plugins.keys())
+
 
 # ============================================================================
 # Data Export Utilities
@@ -590,3 +594,33 @@ integration_registry = IntegrationRegistry()
 # Register default implementations
 integration_registry.register_database("sqlite", SQLiteInterface())
 integration_registry.register_database("postgresql", PostgreSQLInterface())
+
+# Register Supabase integration (if available)
+try:
+    from .supabase_integration import (
+        SupabaseConfig,
+        SupabaseDatabaseInterface,
+        SupabasePlugin,
+    )
+
+    # Create configuration
+    supabase_config = SupabaseConfig()
+
+    # Register Supabase database interface
+    integration_registry.register_database(
+        "supabase", SupabaseDatabaseInterface(supabase_config)
+    )
+
+    # Register Supabase plugin with plugin manager
+    supabase_plugin = SupabasePlugin(supabase_config)
+    integration_registry.plugin_manager.register_plugin(supabase_plugin, priority=50)
+
+except ImportError:
+    # Supabase integration not available (dependencies not installed)
+    pass
+except Exception as e:
+    # Configuration or other error - log but don't fail
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Failed to register Supabase integration: {str(e)}")

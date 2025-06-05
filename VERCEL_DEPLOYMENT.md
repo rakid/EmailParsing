@@ -14,7 +14,7 @@ This guide helps you deploy the Inbox Zen MCP Email Processing Server to Vercel 
 
 ```bash
 # Clone your repository
-git clone <your-repo-url>
+git clone git@github.com:rakid/EmailParsing.git
 cd EmailParsing
 
 # Deploy to Vercel

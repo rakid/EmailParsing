@@ -187,11 +187,13 @@ class EmailExtractor:
                             match_str = str(match)
                         indicators[level].append(match_str.lower().strip())
 
-                        # Early termination for performance - limit to 20 matches per level
+                        # Early termination for performance -
+                        # limit to 20 matches per level
                         if len(indicators[level]) >= 20:
                             break
 
-                # Stop processing more patterns if we have enough high urgency indicators
+                # Stop processing more patterns if we have
+                # enough high urgency indicators
                 if level == "high" and len(indicators[level]) >= 10:
                     break
 
@@ -305,7 +307,8 @@ class EmailExtractor:
                         match_str = str(match)
                     sentiment[sentiment_type].append(match_str.lower().strip())
 
-                    # Early termination for performance - limit to 10 matches per sentiment type
+                    # Early termination for performance -
+                    # limit to 10 matches per sentiment type
                     if len(sentiment[sentiment_type]) >= 10:
                         break
 
@@ -358,7 +361,9 @@ class EmailExtractor:
             text_for_analysis = text_content
 
         logger.info(
-            f"Extracting metadata from email {email_data.message_id} (content size: {len(text_content)} chars)"
+            "Extracting metadata from email %s (content size: %d chars)",
+            email_data.message_id,
+            len(text_content),
         )
 
         # Extract all metadata using optimized text
