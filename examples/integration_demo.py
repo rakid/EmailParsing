@@ -1,28 +1,27 @@
 # Example Integration Implementation
 """
-This module demonstrates how to use the integration interfaces
-for extending the Email Parsing MCP Server functionality.
+Integration Demo
+
+This script demonstrates the integration of the email processing system
+with various plugins and data sources.
 """
 
 import asyncio
-import os
-import sys
-from datetime import datetime
 from typing import Any, Dict, List
+import os
 
-# Add the parent directory to the path so we can import from src
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+# Import the plugin interface and models
 from src.integrations import (
     AIAnalysisFormat,
     DataExporter,
-    ExportFormat,
+    EmailAnalysis,
     OpenAIInterface,
-    PluginInterface,
     SQLiteInterface,
     integration_registry,
 )
-from src.models import EmailAnalysis, EmailData, ProcessedEmail, UrgencyLevel
+
+# Import models for type hints
+from src.models import ProcessedEmail, UrgencyLevel
 from src.storage import email_storage
 
 # ============================================================================
@@ -114,7 +113,7 @@ class SpamDetectionPlugin:
         ).lower()
 
         # Simple spam detection
-        spam_score = 0
+        spam_score = 0.0  # Changed from int to float
         for keyword in self.spam_keywords:
             if keyword in text_content:
                 spam_score += 0.2
@@ -129,7 +128,16 @@ class SpamDetectionPlugin:
 
         # Add spam detection results
         if email.analysis:
-            email.analysis.tags.append(f"spam_score:{spam_score:.2f}")
+            print("  - Processing email with spam detection...")
+        print(
+            f"  - Spam score: {spam_score:.2f}"
+            if "spam_score" in locals()
+            else "  - Spam score: N/A"
+        )
+        print(
+            f"  - Is spam: {is_spam}" if "is_spam" in locals() else "  - Is spam: N/A"
+        )
+        if email.analysis:
             if is_spam:
                 email.analysis.tags.append("spam:detected")
                 email.analysis.urgency_level = (
@@ -232,16 +240,18 @@ async def demonstrate_data_export():
 
     emails = list(email_storage.values())[:5]  # Export first 5 emails
 
-    # Export to different formats
-    formats_to_test = [ExportFormat.JSON, ExportFormat.JSONL]
-
-    for format_type in formats_to_test:
+    # Example: Export to all formats
+    for format_type in [
+        AIAnalysisFormat.JSON,
+        AIAnalysisFormat.CSV,
+        AIAnalysisFormat.EXCEL,
+    ]:
         filename = f"example_export.{format_type.value}"
         try:
             DataExporter.export_emails(emails, format_type, filename)
-            print(f"✅ Exported {len(emails)} emails to {filename}")
+            print(f"  - {len(emails)} emails exported")
         except Exception as e:
-            print(f"❌ Failed to export to {format_type.value}: {e}")
+            print(f"  - Exporting to {format_type.value} failed: {e}")
 
 
 async def demonstrate_ai_format():
@@ -289,7 +299,7 @@ async def run_integration_examples():
         await demonstrate_ai_format()
         print()
 
-        print("🎉 All integration examples completed successfully!")
+        print("✅ All operations completed!")
 
     except Exception as e:
         print(f"❌ Error running integration examples: {e}")

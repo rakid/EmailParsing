@@ -476,7 +476,6 @@ def test_main_block_runs_uvicorn(mock_logger_main, mock_uvicorn_run):
     # or a subprocess call, and then assert based on the mocks.
     # Given the current structure, this test will remain as 'pass'.
     # For actual coverage, mark the __main__ block with '# pragma: no cover' in src/webhook.py
-    pass
 
 
 @patch.dict(sys.modules, {"src.api_routes": None})

@@ -436,12 +436,27 @@ class TestToolHandling:
             "get_email_stats",
             "extract_tasks",
         ]
+
+        # Real-time tools are always available
+        realtime_tools = [
+            "subscribe_to_email_changes",
+            "get_realtime_stats",
+            "manage_user_subscriptions",
+            "monitor_ai_analysis",
+        ]
+        expected_tools.extend(realtime_tools)
+
         # If integrations are available, more tools will be listed
         if server.INTEGRATIONS_AVAILABLE:
-            expected_tools.extend(
-                ["export_emails", "list_integrations", "process_through_plugins"]
-            )
-            assert len(tools_list) == 7
+            integration_tools = [
+                "export_emails",
+                "list_integrations",
+                "process_through_plugins",
+            ]
+            expected_tools.extend(integration_tools)
+            assert len(tools_list) == 11  # 4 base + 4 realtime + 3 integration = 11
+        else:
+            assert len(tools_list) == 8  # 4 base + 4 realtime = 8
 
         for tool_name in expected_tools:
             assert tool_name in tool_names

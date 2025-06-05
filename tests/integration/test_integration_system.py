@@ -40,10 +40,7 @@ class EmailCategoryPlugin:
         self.categories = config.get(
             "categories", ["work", "personal", "marketing", "notifications", "support"]
         )
-        print(
-            f"EmailCategoryPlugin initialized with categories: {
-                self.categories}"
-        )
+        print(f"EmailCategoryPlugin initialized with categories: " f"{self.categories}")
 
     async def process_email(self, email: ProcessedEmail) -> ProcessedEmail:
         """Add category based on email content"""
@@ -58,7 +55,20 @@ class EmailCategoryPlugin:
             category = "personal"
 
         # Add category to tags
-        email.analysis.tags.append(f"category:{category}")
+        if email.analysis is None:
+            email.analysis = EmailAnalysis(
+                urgency_score=50,
+                urgency_level=UrgencyLevel.MEDIUM,
+                sentiment="neutral",
+                confidence=0.8,
+                keywords=[],
+                action_items=[],
+                temporal_references=[],
+                tags=[f"category:{category}"],
+                category=category,
+            )
+        else:
+            email.analysis.tags.append(f"category:{category}")
         return email
 
     async def cleanup(self) -> None:
@@ -82,8 +92,7 @@ class SpamDetectionPlugin:
         """Initialize spam detection"""
         self.spam_threshold = config.get("spam_threshold", 0.8)
         print(
-            f"SpamDetectionPlugin initialized with threshold: {
-                self.spam_threshold}"
+            f"SpamDetectionPlugin initialized with threshold: " f"{self.spam_threshold}"
         )
 
     async def process_email(self, email: ProcessedEmail) -> ProcessedEmail:
@@ -100,10 +109,22 @@ class SpamDetectionPlugin:
                 spam_score += 0.2
 
         # Add spam analysis to tags
-        if spam_score > self.spam_threshold:
-            email.analysis.tags.append("spam:likely")
+        is_spam = spam_score > self.spam_threshold
+        spam_tag = "spam:likely" if is_spam else "spam:unlikely"
+        if email.analysis is None:
+            email.analysis = EmailAnalysis(
+                urgency_score=50,
+                urgency_level=UrgencyLevel.MEDIUM,
+                sentiment="neutral",
+                confidence=0.8,
+                keywords=[],
+                action_items=[],
+                temporal_references=[],
+                tags=[spam_tag],
+                category=None,
+            )
         else:
-            email.analysis.tags.append("spam:unlikely")
+            email.analysis.tags.append(spam_tag)
 
         return email
 

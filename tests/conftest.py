@@ -3,9 +3,14 @@ Pytest configuration and shared fixtures for unit tests
 """
 
 import asyncio
+import sys
 from datetime import datetime
+from pathlib import Path
 
 import pytest
+
+# Add src directory to path for local imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 # Configure pytest asyncio
 pytest_plugins = ("pytest_asyncio",)

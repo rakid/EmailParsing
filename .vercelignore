@@ -1,0 +1,59 @@
+# Virtual environment
+venv/
+.venv/
+env/
+.env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Testing and coverage
+htmlcov/
+.pytest_cache/
+.coverage
+.tox/
+.mypy_cache/
+
+# Logs
+logs/
+*.log
+
+# Development files
+.git/
+.gitignore
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation build
+docs/_build/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Large test files
+broken_files/
+MagicMock/
+
+# Development databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Node modules (if any)
+node_modules/
+
+# OS files
+.DS_Store
+.Trash-*
