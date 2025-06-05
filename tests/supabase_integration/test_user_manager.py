@@ -879,14 +879,6 @@ class TestSupabaseUserManager:
         mock_supabase_client.table.assert_called_once_with("audit_logs")
 
         # Verify the insert was called with expected data
-        expected_log_data = {
-            "user_id": test_user_id,
-            "action": test_action,
-            "details": test_details,
-            "organization_id": test_org_id,
-            "ip_address": None,
-            "user_agent": None,
-        }
         mock_audit_logs.insert.assert_called_once()
         call_args = mock_audit_logs.insert.call_args[0][0]
 
