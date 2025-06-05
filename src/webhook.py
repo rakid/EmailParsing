@@ -419,7 +419,7 @@ async def detailed_health_check():
         "emails_processed_in_memory": (
             storage.stats.total_processed
         ),  # Clarify in-memory
-        "tests": "0.0.2",
+        "stack": os.environ.get("VERCEL_DEPLOYMENT_ID", "default"),
         "errors_logged": storage.stats.total_errors,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
