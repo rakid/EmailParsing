@@ -9,15 +9,20 @@ including WebSocket integration, real-time subscriptions, and AI monitoring.
 # Standard library imports
 import asyncio
 import json
+import os
+import sys
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import patch
 
 # Third-party imports
 import pytest
 
-# Local imports
-from mcp.types import TextContent
+# Add src to path for local imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# Local imports
+from src.mcp.types import TextContent
 from src.models import EmailAnalysis, EmailData, UrgencyLevel
 from src.server import (
     REALTIME_AVAILABLE,

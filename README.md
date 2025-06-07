@@ -81,6 +81,18 @@ docker build -t inbox-zen .
 docker run -p 8000:8000 inbox-zen
 ```
 
+### Testing
+
+```bash
+# Quick test to verify everything works
+pytest tests/test_server.py tests/test_storage.py tests/test_webhook.py -v
+
+# Full test suite with coverage
+pytest tests/ --cov=src --cov-report=html --cov-report=term
+```
+
+📖 **[Complete Local Testing Guide](docs/local-testing-guide.md)** - Comprehensive guide for development and testing workflows
+
 ## 🚀 Deployment Options
 
 ### Local Development

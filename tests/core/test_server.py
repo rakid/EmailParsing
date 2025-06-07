@@ -7,13 +7,18 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
-from mcp.types import (  # Ajout des imports MCP nécessaires
+
+# Add src directory to PYTHONPATH
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
+from src import server, storage
+
+# handle_call_tool est maintenant disponible via server.handle_call_tool
+from src.config import config  # Import config for server metadata
+from src.mcp.types import (
     PromptMessage,
     TextContent,
 )
-
-from src import server, storage
-from src.config import config  # Import config for server metadata
 from src.models import (
     EmailAnalysis,
     EmailData,
@@ -458,25 +463,53 @@ class TestToolHandling:
         else:
             assert len(tools_list) == 8  # 4 base + 4 realtime = 8
 
+        # If AI tools are available, even more tools will be listed
+        if server.AI_TOOLS_AVAILABLE:
+            expected_tools.extend(
+                [
+                    "ai_extract_tasks",
+                    "ai_analyze_context",
+                    "ai_summarize_thread",
+                    "ai_detect_urgency",
+                    "ai_suggest_response",
+                ]
+            )
+
+        # Verify we have at least the expected tools (may have more in future)
+        assert len(tools_list) >= len(expected_tools)
+
         for tool_name in expected_tools:
             assert tool_name in tool_names
 
     @pytest.mark.asyncio
     async def test_analyze_email_tool_existing_email(
-        self, sample_email_data, sample_analysis_data
+        self, sample_email_data, sample_analysis_data, monkeypatch
     ):
         """Test analyze_email tool with existing email"""
+        # Setup test data with analysis
         email_data = EmailData(**sample_email_data)
         analysis = EmailAnalysis(**sample_analysis_data)
         processed_email = ProcessedEmail(
-            id="analyze-test", email_data=email_data, analysis=analysis
+            id="analyze-test",
+            email_data=email_data,
+            status=EmailStatus.ANALYZED,
+            analysis=analysis,
         )
         storage.email_storage["analyze-test"] = processed_email
 
-        result_content_list = await server.handle_call_tool(  # Direct call
+        # Mock the AI provider
+        mock_ai_provider = MagicMock()
+        mock_ai_provider.analyze_context.return_value = analysis
+
+        # Patch the AI provider in the server module
+        monkeypatch.setattr("src.server.ai_provider", mock_ai_provider)
+
+        # Call the tool
+        result_content_list = await server.handle_call_tool(
             "analyze_email", {"email_id": "analyze-test"}
         )
 
+        # Verify the response
         assert isinstance(result_content_list, list)
         assert len(result_content_list) == 1
         assert isinstance(result_content_list[0], TextContent)
@@ -485,6 +518,9 @@ class TestToolHandling:
         assert response_data["email_id"] == "analyze-test"
         assert response_data["urgency_score"] == 75
         assert response_data["urgency_level"] == "high"  # From fixture
+
+        # Verify the AI provider was called correctly if needed
+        # mock_ai_provider.analyze_context.assert_called_once_with(...)
 
     @pytest.mark.asyncio
     async def test_analyze_email_tool_content_analysis(self):

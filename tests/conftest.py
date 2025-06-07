@@ -3,14 +3,22 @@ Pytest configuration and shared fixtures for unit tests
 """
 
 import asyncio
+import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-# Add src directory to path for local imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add project root and src directory to path for local imports
+project_root = str(Path(__file__).parent.parent)
+src_dir = os.path.join(project_root, "src")
+
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 # Configure pytest asyncio
 pytest_plugins = ("pytest_asyncio",)
@@ -391,3 +399,10 @@ def edge_case_emails():
             },
         },
     ]
+
+
+@pytest.fixture
+def temp_cache_dir():
+    """Temporary directory for cache testing."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        yield temp_dir

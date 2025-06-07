@@ -4,32 +4,39 @@ Tests end-to-end functionality including webhook processing, MCP protocol compli
 and real-world scenarios.
 """
 
+# Standard library imports
 import json
 import os
-
-# Import MCP and server components
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+# Third-party imports
 import pytest
 from fastapi.testclient import TestClient
 
+# Add src to path for local imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Local imports
 from src import server  # MCP Server module
 from src import storage
-from src.integrations import DatabaseFormat  # Added DatabaseFormat
-from src.integrations import DataExporter  # Added DataExporter
-from src.integrations import ExportFormat  # Added ExportFormat
-from src.integrations import PluginInterface  # Added PluginInterface for example plugin
-from src.integrations import PluginManager  # Added PluginManager
 from src.integrations import (
     AIAnalysisFormat,
+    DatabaseFormat,
     DatabaseInterface,
+    DataExporter,
+    ExportFormat,
+    PluginInterface,
+    PluginManager,
     PostgreSQLInterface,
     SQLiteInterface,
 )
-from src.models import (  # Added EmailStatus
+
+# Import models after path is set
+from src.models import (
     EmailAnalysis,
     EmailData,
     EmailStatus,

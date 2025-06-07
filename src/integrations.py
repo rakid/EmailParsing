@@ -624,3 +624,21 @@ except Exception as e:
 
     logger = logging.getLogger(__name__)
     logger.warning(f"Failed to register Supabase integration: {str(e)}")
+
+# Register AI Plugin integration (if available)
+try:
+    from .ai.plugin import SambaNovaPlugin
+
+    # Register SambaNova AI plugin
+    sambanova_plugin = SambaNovaPlugin()
+    integration_registry.plugin_manager.register_plugin(sambanova_plugin, priority=75)
+
+except ImportError:
+    # AI plugin not available
+    pass
+except Exception as e:
+    # Configuration or other error - log but don't fail
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Failed to register AI plugin integration: {str(e)}")
