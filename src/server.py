@@ -1132,6 +1132,8 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
             return await _handle_search_emails(arguments)
         elif name == "extract_tasks":
             return await _handle_extract_tasks(arguments)
+        elif name == "get_email_stats":
+            return await _handle_get_email_stats(arguments)
         elif name == "list_integrations":
             return await _handle_list_integrations()
         else:
@@ -1273,6 +1275,29 @@ async def _handle_extract_tasks(arguments: dict) -> list[TextContent]:
     ]
 
 
+async def _handle_get_email_stats(arguments: dict) -> list[TextContent]:
+    """Handle get_email_stats tool calls."""
+    try:
+        # Get current stats from storage
+        stats_data = storage.stats.model_dump()
+        stats_data["total_emails_in_storage"] = len(storage.email_storage)
+        stats_data["timestamp"] = datetime.now().isoformat()
+
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(stats_data, indent=2, default=str),
+            )
+        ]
+    except Exception as e:
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": f"Failed to get stats: {str(e)}"}),
+            )
+        ]
+
+
 async def _handle_list_integrations() -> list[TextContent]:
     """Handle list_integrations tool calls."""
     return [
@@ -1287,17 +1312,17 @@ async def _handle_list_integrations() -> list[TextContent]:
 
 
 @server.list_tools()
-async def handle_list_tools() -> list[dict]:
+async def handle_list_tools() -> list[Tool]:
     """List all available tools with their schemas.
 
     Returns:
         List of tool definitions with their schemas
     """
     return [
-        {
-            "name": "analyze_email",
-            "description": "Analyze an email to extract key information, sentiment, and action items",
-            "parameters": {
+        Tool(
+            name="analyze_email",
+            description="Analyze an email to extract key information, sentiment, and action items",
+            parameters={
                 "type": "object",
                 "properties": {
                     "email_id": {
@@ -1315,7 +1340,7 @@ async def handle_list_tools() -> list[dict]:
                 },
                 "anyOf": [{"required": ["email_id"]}, {"required": ["content"]}],
             },
-            "returns": {
+            returns={
                 "type": "object",
                 "properties": {
                     "email_id": {"type": "string"},
@@ -1339,32 +1364,50 @@ async def handle_list_tools() -> list[dict]:
                     },
                 },
             },
-            "required": ["email_id", "content", "analysis"],
-            "metadata": {"version": "1.0.0"},
-        },
-        {
-            "name": "search_emails",
-            "description": "Search through processed emails",
-            "parameters": {
+            required=["email_id", "content", "analysis"],
+            metadata={"version": "1.0.0"},
+        ),
+        Tool(
+            name="search_emails",
+            description="Search through processed emails",
+            parameters={
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search query string"}
                 },
                 "required": ["query"],
             },
-            "returns": {
+            returns={
                 "type": "object",
                 "properties": {
                     "query": {"type": "string"},
                     "results": {"type": "array", "items": {"type": "object"}},
                 },
             },
-            "metadata": {"version": "1.0.0"},
-        },
-        {
-            "name": "extract_tasks",
-            "description": "Extract tasks from a specific email or all emails",
-            "parameters": {
+            metadata={"version": "1.0.0"},
+        ),
+        Tool(
+            name="get_email_stats",
+            description="Get comprehensive email processing statistics",
+            parameters={"type": "object"},
+            returns={
+                "type": "object",
+                "properties": {
+                    "total_processed": {"type": "integer"},
+                    "total_errors": {"type": "integer"},
+                    "avg_urgency_score": {"type": "number"},
+                    "urgency_distribution": {"type": "object"},
+                    "last_processed": {"type": ["string", "null"]},
+                    "total_emails_in_storage": {"type": "integer"},
+                    "timestamp": {"type": "string"},
+                },
+            },
+            metadata={"version": "1.0.0"},
+        ),
+        Tool(
+            name="extract_tasks",
+            description="Extract tasks from a specific email or all emails",
+            parameters={
                 "type": "object",
                 "properties": {
                     "email_id": {
@@ -1373,7 +1416,7 @@ async def handle_list_tools() -> list[dict]:
                     }
                 },
             },
-            "returns": {
+            returns={
                 "type": "object",
                 "properties": {
                     "email_id": {"type": ["string", "null"]},
@@ -1381,21 +1424,21 @@ async def handle_list_tools() -> list[dict]:
                     "total_tasks": {"type": "integer"},
                 },
             },
-            "metadata": {"version": "1.0.0"},
-        },
-        {
-            "name": "list_integrations",
-            "description": "List all available integrations",
-            "parameters": {"type": "object"},
-            "returns": {
+            metadata={"version": "1.0.0"},
+        ),
+        Tool(
+            name="list_integrations",
+            description="List all available integrations",
+            parameters={"type": "object"},
+            returns={
                 "type": "object",
                 "properties": {
                     "integrations": {"type": "array", "items": {"type": "string"}},
                     "status": {"type": "string"},
                 },
             },
-            "metadata": {"version": "1.0.0"},
-        },
+            metadata={"version": "1.0.0"},
+        ),
     ]
 
 

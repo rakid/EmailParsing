@@ -4,7 +4,7 @@ MCP Types - Common data types and models for the Model Context Protocol.
 
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class TextContent(BaseModel):
@@ -73,11 +73,19 @@ class Prompt(BaseModel):
 class Resource(BaseModel):
     """A resource that can be used by tools or prompts."""
 
-    id: str
-    type: str
+    uri: str
     name: str
     description: str
+    mimeType: Optional[str] = None
     metadata: Dict[str, Any] = {}
+
+    @field_validator('uri', mode='before')
+    @classmethod
+    def convert_uri_to_string(cls, v):
+        """Convert AnyUrl to string if needed."""
+        if hasattr(v, '__str__'):
+            return str(v)
+        return v
 
 
 class Tool(BaseModel):
