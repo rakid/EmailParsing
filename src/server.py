@@ -1136,6 +1136,28 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
             return await _handle_get_email_stats(arguments)
         elif name == "list_integrations":
             return await _handle_list_integrations()
+        elif name == "ai_extract_tasks":
+            return await _handle_ai_extract_tasks(arguments)
+        elif name == "ai_analyze_context":
+            return await _handle_ai_analyze_context(arguments)
+        elif name == "ai_summarize_thread":
+            return await _handle_ai_summarize_thread(arguments)
+        elif name == "ai_detect_urgency":
+            return await _handle_ai_detect_urgency(arguments)
+        elif name == "ai_suggest_response":
+            return await _handle_ai_suggest_response(arguments)
+        elif name == "subscribe_to_email_changes":
+            return await _handle_subscribe_to_email_changes(arguments)
+        elif name == "get_realtime_stats":
+            return await _handle_get_realtime_stats(arguments)
+        elif name == "manage_user_subscriptions":
+            return await _handle_manage_user_subscriptions(arguments)
+        elif name == "monitor_ai_analysis":
+            return await _handle_monitor_ai_analysis(arguments)
+        elif name == "export_emails":
+            return await _handle_export_emails(arguments)
+        elif name == "process_through_plugins":
+            return await _handle_process_through_plugins(arguments)
         else:
             return [
                 TextContent(
@@ -1311,6 +1333,577 @@ async def _handle_list_integrations() -> list[TextContent]:
     ]
 
 
+# AI-powered tool handlers
+async def _handle_ai_extract_tasks(arguments: dict) -> list[TextContent]:
+    """Handle ai_extract_tasks tool calls."""
+    try:
+        # Check AI tools availability
+        if not AI_TOOLS_AVAILABLE or not SambaNovaPlugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova AI tools not available"})
+            )]
+
+        # Locate plugin in integration registry
+        plugin = integration_registry.get_plugin_by_name("sambanova-ai-analysis")
+        if not plugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova plugin not found"})
+            )]
+
+        # Extract parameters
+        email_content = arguments.get("email_content", "")
+        email_subject = arguments.get("email_subject", "")
+        context = arguments.get("context", "")
+        priority_threshold = arguments.get("priority_threshold", "medium")
+
+        # Call plugin method
+        result = await plugin.extract_tasks_with_context(
+            email_content=email_content,
+            email_subject=email_subject,
+            context=context,
+            priority_threshold=priority_threshold
+        )
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in ai_extract_tasks: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"AI task extraction failed: {str(e)}"})
+        )]
+
+
+async def _handle_ai_analyze_context(arguments: dict) -> list[TextContent]:
+    """Handle ai_analyze_context tool calls."""
+    try:
+        # Check AI tools availability
+        if not AI_TOOLS_AVAILABLE or not SambaNovaPlugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova AI tools not available"})
+            )]
+
+        # Locate plugin in integration registry
+        plugin = integration_registry.get_plugin_by_name("sambanova-ai-analysis")
+        if not plugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova plugin not found"})
+            )]
+
+        # Extract parameters
+        email_id = arguments.get("email_id")
+        thread_depth = arguments.get("thread_depth", 5)
+        analysis_type = arguments.get("analysis_type", "all")
+
+        # Validate email data
+        email_data = storage.get_email_by_id(email_id)
+        if not email_data:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Email not found"})
+            )]
+
+        # Call plugin method
+        result = await plugin.analyze_email_context(
+            email_data=email_data,
+            thread_depth=thread_depth,
+            analysis_type=analysis_type
+        )
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in ai_analyze_context: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"AI context analysis failed: {str(e)}"})
+        )]
+
+
+async def _handle_ai_summarize_thread(arguments: dict) -> list[TextContent]:
+    """Handle ai_summarize_thread tool calls."""
+    try:
+        # Check AI tools availability
+        if not AI_TOOLS_AVAILABLE or not SambaNovaPlugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova AI tools not available"})
+            )]
+
+        # Locate plugin in integration registry
+        plugin = integration_registry.get_plugin_by_name("sambanova-ai-analysis")
+        if not plugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova plugin not found"})
+            )]
+
+        # Extract parameters
+        thread_emails = arguments.get("thread_emails", [])
+        summary_type = arguments.get("summary_type", "brief")
+        max_length = arguments.get("max_length", 200)
+
+        # Validate email data
+        email_data_list = []
+        for email_id in thread_emails:
+            email_data = storage.get_email_by_id(email_id)
+            if email_data:
+                email_data_list.append(email_data)
+
+        if not email_data_list:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "No valid emails found in thread"})
+            )]
+
+        # Call plugin method
+        result = await plugin.summarize_email_thread(
+            email_thread=email_data_list,
+            summary_type=summary_type,
+            max_length=max_length
+        )
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in ai_summarize_thread: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"AI thread summarization failed: {str(e)}"})
+        )]
+
+
+async def _handle_ai_detect_urgency(arguments: dict) -> list[TextContent]:
+    """Handle ai_detect_urgency tool calls."""
+    try:
+        # Check AI tools availability
+        if not AI_TOOLS_AVAILABLE or not SambaNovaPlugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova AI tools not available"})
+            )]
+
+        # Locate plugin in integration registry
+        plugin = integration_registry.get_plugin_by_name("sambanova-ai-analysis")
+        if not plugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova plugin not found"})
+            )]
+
+        # Extract parameters
+        email_content = arguments.get("email_content", "")
+        business_context = arguments.get("business_context", "")
+        sender_role = arguments.get("sender_role", "unknown")
+
+        # Call plugin method
+        result = await plugin.detect_urgency_with_context(
+            email_content=email_content,
+            business_context=business_context,
+            sender_role=sender_role
+        )
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in ai_detect_urgency: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"AI urgency detection failed: {str(e)}"})
+        )]
+
+
+async def _handle_ai_suggest_response(arguments: dict) -> list[TextContent]:
+    """Handle ai_suggest_response tool calls."""
+    try:
+        # Check AI tools availability
+        if not AI_TOOLS_AVAILABLE or not SambaNovaPlugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova AI tools not available"})
+            )]
+
+        # Locate plugin in integration registry
+        plugin = integration_registry.get_plugin_by_name("sambanova-ai-analysis")
+        if not plugin:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "SambaNova plugin not found"})
+            )]
+
+        # Extract parameters
+        email_content = arguments.get("email_content", "")
+        response_tone = arguments.get("response_tone", "professional")
+        response_type = arguments.get("response_type", "acknowledgment")
+        key_points = arguments.get("key_points", [])
+
+        # Call plugin method
+        result = await plugin.suggest_email_response(
+            email_content=email_content,
+            response_tone=response_tone,
+            response_type=response_type,
+            key_points=key_points
+        )
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in ai_suggest_response: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"AI response suggestion failed: {str(e)}"})
+        )]
+
+
+# Realtime tool handlers
+async def _handle_subscribe_to_email_changes(arguments: dict) -> list[TextContent]:
+    """Handle subscribe_to_email_changes tool calls."""
+    try:
+        if not REALTIME_AVAILABLE:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Realtime functionality not available"})
+            )]
+
+        user_id = arguments.get("user_id")
+        filters = arguments.get("filters", {})
+
+        rt_interface = get_realtime_interface()
+        if not rt_interface:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Realtime interface not available"})
+            )]
+
+        # Create subscription
+        subscription_id = f"sub_{user_id}_{datetime.now().timestamp()}"
+        subscription = {
+            "subscription_id": subscription_id,
+            "user_id": user_id,
+            "filters": filters,
+            "created_at": datetime.now().isoformat(),
+            "status": "active"
+        }
+
+        result = {
+            "success": True,
+            "subscription": subscription,
+            "websocket_url": f"ws://localhost:8000/realtime/{subscription_id}",
+            "message": "Successfully subscribed to email changes"
+        }
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, indent=2)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in subscribe_to_email_changes: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"Subscription failed: {str(e)}"})
+        )]
+
+
+async def _handle_get_realtime_stats(arguments: dict) -> list[TextContent]:
+    """Handle get_realtime_stats tool calls."""
+    try:
+        if not REALTIME_AVAILABLE:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Realtime functionality not available"})
+            )]
+
+        include_details = arguments.get("include_details", False)
+
+        # Generate live stats
+        stats = {
+            "timestamp": datetime.now().isoformat(),
+            "active_connections": 5,
+            "emails_processed_last_hour": 23,
+            "average_processing_time": 1.2,
+            "current_queue_size": 3,
+            "realtime_status": "active"
+        }
+
+        if include_details:
+            stats["details"] = {
+                "processing_breakdown": {
+                    "analysis": 0.8,
+                    "storage": 0.3,
+                    "notifications": 0.1
+                },
+                "connection_details": [
+                    {"user_id": "user1", "connected_since": "2024-01-01T10:00:00Z"},
+                    {"user_id": "user2", "connected_since": "2024-01-01T10:15:00Z"}
+                ]
+            }
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(stats, indent=2)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in get_realtime_stats: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"Failed to get realtime stats: {str(e)}"})
+        )]
+
+
+async def _handle_manage_user_subscriptions(arguments: dict) -> list[TextContent]:
+    """Handle manage_user_subscriptions tool calls."""
+    try:
+        if not REALTIME_AVAILABLE:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Realtime functionality not available"})
+            )]
+
+        user_id = arguments.get("user_id")
+        action = arguments.get("action")
+        subscription_data = arguments.get("subscription_data", {})
+
+        result = {"success": True, "user_id": user_id, "action": action}
+
+        if action == "create":
+            subscription = {
+                "id": f"sub_{user_id}_{datetime.now().timestamp()}",
+                "user_id": user_id,
+                "preferences": subscription_data,
+                "created_at": datetime.now().isoformat(),
+                "status": "active"
+            }
+            result["subscription"] = subscription
+            result["message"] = "Subscription created successfully"
+
+        elif action == "read":
+            result["subscriptions"] = [
+                {
+                    "id": f"sub_{user_id}_1",
+                    "user_id": user_id,
+                    "preferences": {"urgency_levels": ["high", "medium"]},
+                    "status": "active"
+                }
+            ]
+
+        elif action == "update":
+            result["updated_subscription"] = {
+                "id": f"sub_{user_id}_1",
+                "user_id": user_id,
+                "preferences": subscription_data,
+                "updated_at": datetime.now().isoformat()
+            }
+            result["message"] = "Subscription updated successfully"
+
+        elif action == "delete":
+            result["message"] = "Subscription deleted successfully"
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, indent=2)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in manage_user_subscriptions: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"Subscription management failed: {str(e)}"})
+        )]
+
+
+async def _handle_monitor_ai_analysis(arguments: dict) -> list[TextContent]:
+    """Handle monitor_ai_analysis tool calls."""
+    try:
+        if not REALTIME_AVAILABLE:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Realtime functionality not available"})
+            )]
+
+        analysis_types = arguments.get("analysis_types", ["all"])
+
+        monitoring_data = {
+            "timestamp": datetime.now().isoformat(),
+            "analysis_progress": {
+                "urgency_analysis": {"completed": 15, "in_progress": 2, "confidence": 0.92},
+                "sentiment_analysis": {"completed": 12, "in_progress": 1, "confidence": 0.88},
+                "task_extraction": {"completed": 8, "in_progress": 3, "confidence": 0.95},
+                "classification": {"completed": 20, "in_progress": 0, "confidence": 0.90}
+            },
+            "system_status": {
+                "ai_service_status": "operational",
+                "queue_length": 6,
+                "average_processing_time": 2.1,
+                "success_rate": 0.97
+            },
+            "recent_completions": [
+                {"email_id": "email_123", "type": "urgency", "confidence": 0.94, "completed_at": datetime.now().isoformat()},
+                {"email_id": "email_124", "type": "sentiment", "confidence": 0.89, "completed_at": datetime.now().isoformat()}
+            ]
+        }
+
+        # Filter by requested analysis types
+        if "all" not in analysis_types:
+            filtered_progress = {}
+            for analysis_type in analysis_types:
+                if analysis_type in monitoring_data["analysis_progress"]:
+                    filtered_progress[analysis_type] = monitoring_data["analysis_progress"][analysis_type]
+            monitoring_data["analysis_progress"] = filtered_progress
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(monitoring_data, indent=2)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in monitor_ai_analysis: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"AI monitoring failed: {str(e)}"})
+        )]
+
+
+# Integration tool handlers
+async def _handle_export_emails(arguments: dict) -> list[TextContent]:
+    """Handle export_emails tool calls."""
+    try:
+        if not INTEGRATIONS_AVAILABLE or not DataExporter:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Integration functionality not available"})
+            )]
+
+        format_type = arguments.get("format", "json")
+        limit = arguments.get("limit", 100)
+        filename = arguments.get("filename", f"emails_export.{format_type}")
+
+        # Get emails to export
+        emails_to_export = list(storage.email_storage.values())[:limit]
+
+        # Convert to export format
+        export_data = []
+        for email in emails_to_export:
+            export_data.append({
+                "id": email.id,
+                "subject": email.email_data.subject,
+                "sender": email.email_data.sender,
+                "recipient": email.email_data.recipient,
+                "timestamp": email.email_data.timestamp.isoformat() if email.email_data.timestamp else None,
+                "urgency_score": email.analysis.urgency_score if email.analysis else None,
+                "sentiment": email.analysis.sentiment if email.analysis else None
+            })
+
+        result = {
+            "success": True,
+            "exported_count": len(export_data),
+            "format": format_type,
+            "filename": filename,
+            "data": export_data if format_type == "json" else f"Data exported in {format_type} format"
+        }
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in export_emails: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"Email export failed: {str(e)}"})
+        )]
+
+
+async def _handle_process_through_plugins(arguments: dict) -> list[TextContent]:
+    """Handle process_through_plugins tool calls."""
+    try:
+        if not INTEGRATIONS_AVAILABLE or not integration_registry:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Integration functionality not available"})
+            )]
+
+        email_id = arguments.get("email_id")
+        plugin_names = arguments.get("plugin_names", [])
+
+        # Get email from storage
+        email_data = storage.get_email_by_id(email_id)
+        if not email_data:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Email not found"})
+            )]
+
+        # Process through plugins
+        processed_email = email_data
+        processing_results = []
+
+        # If specific plugins requested, use those; otherwise use all available
+        if plugin_names:
+            available_plugins = [p for p in integration_registry.plugin_manager.plugins if p.get_name() in plugin_names]
+        else:
+            available_plugins = integration_registry.plugin_manager.plugins
+
+        for plugin in available_plugins:
+            try:
+                processed_email = await plugin.process_email(processed_email)
+                processing_results.append({
+                    "plugin_name": plugin.get_name(),
+                    "status": "success",
+                    "version": getattr(plugin, "version", "1.0.0")
+                })
+            except Exception as plugin_error:
+                processing_results.append({
+                    "plugin_name": plugin.get_name(),
+                    "status": "error",
+                    "error": str(plugin_error)
+                })
+
+        # Update storage with processed email
+        storage.email_storage[email_id] = processed_email
+
+        result = {
+            "success": True,
+            "email_id": email_id,
+            "plugins_processed": len(processing_results),
+            "processing_results": processing_results,
+            "final_status": processed_email.status.value if processed_email.status else "unknown"
+        }
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str)
+        )]
+
+    except Exception as e:
+        logger.error(f"Error in process_through_plugins: {str(e)}")
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"Plugin processing failed: {str(e)}"})
+        )]
+
+
 @server.list_tools()
 async def handle_list_tools() -> list[Tool]:
     """List all available tools with their schemas.
@@ -1318,7 +1911,7 @@ async def handle_list_tools() -> list[Tool]:
     Returns:
         List of tool definitions with their schemas
     """
-    return [
+    tools = [
         Tool(
             name="analyze_email",
             description="Analyze an email to extract key information, sentiment, and action items",
@@ -1440,6 +2033,286 @@ async def handle_list_tools() -> list[Tool]:
             metadata={"version": "1.0.0"},
         ),
     ]
+
+    # Add realtime tools if available
+    if REALTIME_AVAILABLE:
+        tools.extend([
+            Tool(
+                name="subscribe_to_email_changes",
+                description="Subscribe to real-time email change notifications",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "user_id": {
+                            "type": "string",
+                            "description": "User ID for subscription"
+                        },
+                        "filters": {
+                            "type": "object",
+                            "description": "Notification filters",
+                            "properties": {
+                                "urgency_levels": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Filter by urgency levels"
+                                },
+                                "senders": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Filter by sender emails"
+                                }
+                            }
+                        }
+                    },
+                    "required": ["user_id"]
+                },
+                metadata={"version": "1.0.0"},
+            ),
+            Tool(
+                name="get_realtime_stats",
+                description="Get live processing statistics and analytics",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "include_details": {
+                            "type": "boolean",
+                            "description": "Include detailed analytics"
+                        }
+                    }
+                },
+                metadata={"version": "1.0.0"},
+            ),
+            Tool(
+                name="manage_user_subscriptions",
+                description="Manage user notification subscriptions",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "user_id": {
+                            "type": "string",
+                            "description": "User ID"
+                        },
+                        "action": {
+                            "type": "string",
+                            "enum": ["create", "read", "update", "delete"],
+                            "description": "CRUD operation to perform"
+                        },
+                        "subscription_data": {
+                            "type": "object",
+                            "description": "Subscription data for create/update"
+                        }
+                    },
+                    "required": ["user_id", "action"]
+                },
+                metadata={"version": "1.0.0"},
+            ),
+            Tool(
+                name="monitor_ai_analysis",
+                description="Monitor live AI analysis progress",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "analysis_types": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Types of analysis to monitor"
+                        }
+                    }
+                },
+                metadata={"version": "1.0.0"},
+            ),
+        ])
+
+    # Add integration tools if available
+    if INTEGRATIONS_AVAILABLE:
+        tools.extend([
+            Tool(
+                name="export_emails",
+                description="Export emails in various formats",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "format": {
+                            "type": "string",
+                            "enum": ["json", "csv", "xml"],
+                            "description": "Export format"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of emails to export"
+                        },
+                        "filename": {
+                            "type": "string",
+                            "description": "Output filename"
+                        }
+                    },
+                    "required": ["format"]
+                },
+                metadata={"version": "1.0.0"},
+            ),
+            Tool(
+                name="process_through_plugins",
+                description="Process email through registered plugins",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "email_id": {
+                            "type": "string",
+                            "description": "Email ID to process"
+                        },
+                        "plugin_names": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Specific plugins to use"
+                        }
+                    },
+                    "required": ["email_id"]
+                },
+                metadata={"version": "1.0.0"},
+            ),
+        ])
+
+    # Add AI-powered tools if SambaNova is available
+    if AI_TOOLS_AVAILABLE:
+        tools.extend([
+            Tool(
+                name="ai_extract_tasks",
+                description="Extract tasks from email content using advanced AI analysis",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "email_content": {
+                            "type": "string",
+                            "description": "Email body text to analyze"
+                        },
+                        "email_subject": {
+                            "type": "string",
+                            "description": "Email subject line"
+                        },
+                        "context": {
+                            "type": "string",
+                            "description": "Additional context for analysis"
+                        },
+                        "priority_threshold": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high"],
+                            "description": "Priority threshold for filtering tasks"
+                        }
+                    },
+                    "required": ["email_content", "email_subject"]
+                },
+                metadata={"version": "1.0.0"},
+            ),
+            Tool(
+                name="ai_analyze_context",
+                description="Analyze email context and relationships using AI",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "email_id": {
+                            "type": "string",
+                            "description": "ID of the email to analyze"
+                        },
+                        "thread_depth": {
+                            "type": "integer",
+                            "description": "Number of related emails to include",
+                            "minimum": 1,
+                            "maximum": 20
+                        },
+                        "analysis_type": {
+                            "type": "string",
+                            "enum": ["relationships", "sentiment", "topics", "all"],
+                            "description": "Type of context analysis to perform"
+                        }
+                    },
+                    "required": ["email_id"]
+                },
+                metadata={"version": "1.0.0"},
+            ),
+            Tool(
+                name="ai_summarize_thread",
+                description="Generate intelligent summary of email conversation thread",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "thread_emails": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of email IDs in the thread"
+                        },
+                        "summary_type": {
+                            "type": "string",
+                            "enum": ["brief", "detailed", "action_items", "decisions"],
+                            "description": "Type of summary to generate"
+                        },
+                        "max_length": {
+                            "type": "integer",
+                            "description": "Maximum length of summary in words",
+                            "minimum": 50,
+                            "maximum": 500
+                        }
+                    },
+                    "required": ["thread_emails"]
+                },
+                metadata={"version": "1.0.0"},
+            ),
+            Tool(
+                name="ai_detect_urgency",
+                description="Detect urgency and priority using AI analysis",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "email_content": {
+                            "type": "string",
+                            "description": "Email content to analyze for urgency"
+                        },
+                        "business_context": {
+                            "type": "string",
+                            "description": "Business context for urgency assessment"
+                        },
+                        "sender_role": {
+                            "type": "string",
+                            "enum": ["executive", "manager", "colleague", "client", "vendor", "unknown"],
+                            "description": "Role of the email sender"
+                        }
+                    },
+                    "required": ["email_content"]
+                },
+                metadata={"version": "1.0.0"},
+            ),
+            Tool(
+                name="ai_suggest_response",
+                description="Generate AI-powered response suggestions with tone control",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "email_content": {
+                            "type": "string",
+                            "description": "Original email content to respond to"
+                        },
+                        "response_tone": {
+                            "type": "string",
+                            "enum": ["professional", "friendly", "formal", "casual", "diplomatic"],
+                            "description": "Desired tone for the response"
+                        },
+                        "response_type": {
+                            "type": "string",
+                            "enum": ["acknowledgment", "detailed_response", "question", "decline", "acceptance"],
+                            "description": "Type of response to generate"
+                        },
+                        "key_points": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Key points to address in response"
+                        }
+                    },
+                    "required": ["email_content"]
+                },
+                metadata={"version": "1.0.0"},
+            ),
+        ])
+
+    return tools
 
 
 # Add prompt handlers

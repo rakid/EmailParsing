@@ -442,16 +442,17 @@ class TestToolHandling:
             "extract_tasks",
         ]
 
-        # Real-time tools are always available
-        realtime_tools = [
-            "subscribe_to_email_changes",
-            "get_realtime_stats",
-            "manage_user_subscriptions",
-            "monitor_ai_analysis",
-        ]
-        expected_tools.extend(realtime_tools)
+        # Real-time tools are available when REALTIME_AVAILABLE is True
+        if server.REALTIME_AVAILABLE:
+            realtime_tools = [
+                "subscribe_to_email_changes",
+                "get_realtime_stats",
+                "manage_user_subscriptions",
+                "monitor_ai_analysis",
+            ]
+            expected_tools.extend(realtime_tools)
 
-        # If integrations are available, more tools will be listed
+        # Integration tools that are implemented
         if server.INTEGRATIONS_AVAILABLE:
             integration_tools = [
                 "export_emails",
@@ -459,27 +460,23 @@ class TestToolHandling:
                 "process_through_plugins",
             ]
             expected_tools.extend(integration_tools)
-            assert len(tools_list) == 11  # 4 base + 4 realtime + 3 integration = 11
-        else:
-            assert len(tools_list) == 8  # 4 base + 4 realtime = 8
 
-        # If AI tools are available, even more tools will be listed
+        # If AI tools are available, add AI-powered tools
         if server.AI_TOOLS_AVAILABLE:
-            expected_tools.extend(
-                [
-                    "ai_extract_tasks",
-                    "ai_analyze_context",
-                    "ai_summarize_thread",
-                    "ai_detect_urgency",
-                    "ai_suggest_response",
-                ]
-            )
+            ai_tools = [
+                "ai_extract_tasks",
+                "ai_analyze_context",
+                "ai_summarize_thread",
+                "ai_detect_urgency",
+                "ai_suggest_response",
+            ]
+            expected_tools.extend(ai_tools)
 
-        # Verify we have at least the expected tools (may have more in future)
-        assert len(tools_list) >= len(expected_tools)
+        # Verify we have the expected tools
+        assert len(tools_list) == len(expected_tools), f"Expected {len(expected_tools)} tools, got {len(tools_list)}"
 
         for tool_name in expected_tools:
-            assert tool_name in tool_names
+            assert tool_name in tool_names, f"Expected tool '{tool_name}' not found in {tool_names}"
 
     @pytest.mark.asyncio
     async def test_analyze_email_tool_existing_email(
