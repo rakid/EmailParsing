@@ -11,5 +11,6 @@ parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
 # Import all fixtures from parent conftest - pytest will auto-discover them
+from conftest import *  # noqa: F401, F403
 
 # Note: pytest_plugins is already configured in the parent conftest.py
