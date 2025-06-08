@@ -29,7 +29,7 @@ class PerformanceDashboardConfig:
 
     update_interval: float = 10.0  # seconds
     history_retention: int = 1440  # minutes (24 hours)
-    alert_thresholds: Dict[str, float] = None
+    alert_thresholds: Optional[Dict[str, float]] = None
     export_enabled: bool = True
     export_path: str = "performance_reports"
 

@@ -273,11 +273,11 @@ class RateLimiter:
 
     def __init__(self, config: RateLimitConfig):
         self.config = config
-        self.request_times = deque()
-        self.hourly_requests = deque()
-        self.daily_requests = deque()
-        self.burst_requests = deque()
-        self.last_cooldown = 0
+        self.request_times: deque[float] = deque()
+        self.hourly_requests: deque[float] = deque()
+        self.daily_requests: deque[float] = deque()
+        self.burst_requests: deque[float] = deque()
+        self.last_cooldown: float = 0
 
     async def acquire(self) -> bool:
         """Acquire permission to make a request."""

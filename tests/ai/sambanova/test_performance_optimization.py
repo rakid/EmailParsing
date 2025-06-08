@@ -634,11 +634,11 @@ class TestPerformanceOptimization(unittest.TestCase):
         allowed, _ = rate_limiter.can_proceed()
         self.assertFalse(allowed, "Should block after burst limit")
 
-    @patch("ai.sambanova_interface.SambaNovaInterface")
-    @patch("ai.performance_optimizer.RateLimiter")
-    @patch("ai.performance_optimizer.BatchProcessor")
-    @patch("ai.performance_optimizer.IntelligentCache")
-    @patch("ai.performance_dashboard.PerformanceDashboard")
+    @patch("src.ai.providers.sambanova.sambanova_interface.SambaNovaInterface")
+    @patch("src.ai.performance_optimizer.RateLimiter")
+    @patch("src.ai.performance_optimizer.BatchProcessor")
+    @patch("src.ai.performance_optimizer.IntelligentCache")
+    @patch("src.ai.performance_dashboard.PerformanceDashboard")
     def test_plugin_integration(
         self,
         mock_dashboard,

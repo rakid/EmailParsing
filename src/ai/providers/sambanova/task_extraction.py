@@ -249,7 +249,7 @@ Output valid JSON array of explicit tasks only:
                 "tasks", [tasks_data] if "description" in tasks_data else []
             )
 
-        tasks = []
+        tasks: List[EnhancedTask] = []
         for task_data in tasks_data:
             task_data["extraction_method"] = "explicit"
             task_data["id"] = f"explicit_{int(time.time())}_{len(tasks)}"
@@ -293,7 +293,7 @@ Output valid JSON array of implicit tasks:
                 "tasks", [tasks_data] if "description" in tasks_data else []
             )
 
-        tasks = []
+        tasks: List[EnhancedTask] = []
         for task_data in tasks_data:
             task_data["extraction_method"] = "implicit"
             task_data["id"] = f"implicit_{int(time.time())}_{len(tasks)}"
@@ -337,7 +337,7 @@ Output valid JSON array of inferred tasks:
                 "tasks", [tasks_data] if "description" in tasks_data else []
             )
 
-        tasks = []
+        tasks: List[EnhancedTask] = []
         for task_data in tasks_data:
             task_data["extraction_method"] = "inferred"
             task_data["id"] = f"inferred_{int(time.time())}_{len(tasks)}"

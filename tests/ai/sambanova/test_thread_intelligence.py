@@ -11,6 +11,8 @@ import sys
 from datetime import datetime
 from typing import List
 
+import pytest
+
 # Add the src directory to the Python path
 sys.path.insert(0, "src")
 
@@ -171,6 +173,7 @@ Alex""",
     return emails
 
 
+@pytest.mark.asyncio
 async def test_plugin_thread_intelligence():
     """Test the thread intelligence integration in SambaNovaPlugin."""
 
@@ -259,13 +262,14 @@ async def test_plugin_thread_intelligence():
         raise
 
 
+@pytest.mark.asyncio
 async def test_thread_analysis_data_structure():
     """Test the data structure and format of thread analysis results."""
 
     logger.info("Testing thread analysis data structure...")
 
     # Import ThreadIntelligenceEngine directly
-    from src.ai.thread_intelligence import (
+    from src.ai.providers.sambanova.thread_intelligence import (
         ActionItemEvolution,
         ConversationState,
         ConversationSummary,
