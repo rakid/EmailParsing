@@ -1176,7 +1176,125 @@ async def debug_supabase_detailed():
             else:
                 result["client_creation"]["error"] = "URL or key missing"
         except Exception as e:
+            import traceback
             result["client_creation"]["error"] = str(e)
+            result["client_creation"]["traceback"] = traceback.format_exc()
+
+    return result
+
+
+@app.get("/debug/supabase-raw-test", tags=["Debug"])
+async def debug_supabase_raw_test():
+    """Raw Supabase connection test with maximum error details."""
+    result = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "test_steps": []
+    }
+
+    # Step 1: Environment variables
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_ANON_KEY")
+
+    result["test_steps"].append({
+        "step": "1_environment",
+        "success": bool(url and key),
+        "url_length": len(url) if url else 0,
+        "key_length": len(key) if key else 0,
+        "url_starts_with_https": url.startswith("https://") if url else False
+    })
+
+    if not (url and key):
+        return result
+
+    # Step 2: Import test
+    try:
+        from supabase import create_client, Client
+        result["test_steps"].append({
+            "step": "2_import",
+            "success": True,
+            "create_client_type": str(type(create_client)),
+            "client_class": str(Client)
+        })
+    except Exception as e:
+        import traceback
+        result["test_steps"].append({
+            "step": "2_import",
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        })
+        return result
+
+    # Step 3: Client creation with detailed error handling
+    try:
+        result["test_steps"].append({
+            "step": "3_client_creation_start",
+            "url": url[:50] + "...",
+            "key_preview": key[:10] + "..." + key[-10:] if len(key) > 20 else "SHORT_KEY"
+        })
+
+        client = create_client(url, key)
+
+        result["test_steps"].append({
+            "step": "3_client_creation_success",
+            "success": True,
+            "client_type": str(type(client)),
+            "client_url": getattr(client, 'supabase_url', 'NO_URL_ATTR'),
+            "has_table_method": hasattr(client, 'table')
+        })
+
+    except ImportError as e:
+        import traceback
+        result["test_steps"].append({
+            "step": "3_client_creation_import_error",
+            "success": False,
+            "error_type": "ImportError",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        })
+        return result
+
+    except ValueError as e:
+        import traceback
+        result["test_steps"].append({
+            "step": "3_client_creation_value_error",
+            "success": False,
+            "error_type": "ValueError",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        })
+        return result
+
+    except Exception as e:
+        import traceback
+        result["test_steps"].append({
+            "step": "3_client_creation_general_error",
+            "success": False,
+            "error_type": type(e).__name__,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        })
+        return result
+
+    # Step 4: Simple table query test
+    try:
+        response = client.table("emails").select("id").limit(1).execute()
+        result["test_steps"].append({
+            "step": "4_table_query",
+            "success": True,
+            "response_type": str(type(response)),
+            "has_data": hasattr(response, 'data'),
+            "data_length": len(response.data) if hasattr(response, 'data') else 0
+        })
+    except Exception as e:
+        import traceback
+        result["test_steps"].append({
+            "step": "4_table_query",
+            "success": False,
+            "error_type": type(e).__name__,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        })
 
     return result
 
