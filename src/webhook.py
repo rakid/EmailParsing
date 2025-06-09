@@ -99,19 +99,29 @@ async def startup_event():
             except Exception as e:
                 logger.error(f"Failed to initialize SQLite on startup: {e}")
 
-        # Initialize Supabase (lazy loading - just check config)
+        # Initialize Supabase (force connection)
         try:
             supabase_db = integration_registry.get_database("supabase")
             has_url = os.getenv("SUPABASE_URL")
             has_key = os.getenv("SUPABASE_ANON_KEY")
             if supabase_db and has_url and has_key:
-                # Connect and mark as ready
+                # Force connection and mark as ready
                 await supabase_db.connect("")  # Validates config and connects
-                logger.info("Supabase database configured and connected")
+                # Ensure client is created to mark as truly connected
+                supabase_db._ensure_client()
+                logger.info(f"Supabase database connected: {supabase_db._connected}")
             else:
                 logger.warning("Supabase not configured - missing URL or API key")
         except Exception as e:
             logger.error(f"Failed to configure Supabase: {e}")
+            # If Supabase fails, ensure SQLite is connected as fallback
+            try:
+                sqlite_db = integration_registry.get_database("sqlite")
+                if sqlite_db and '_sqlite_init' in globals():
+                    await _sqlite_init()
+                    logger.info("SQLite fallback initialized")
+            except Exception as sqlite_error:
+                logger.error(f"SQLite fallback also failed: {sqlite_error}")
 
 # --- Webhook Utility Functions ---
 
@@ -312,7 +322,7 @@ async def _save_to_database(
     if not INTEGRATIONS_AVAILABLE:
         return
 
-    # Attempt to get database interface in priority order: Supabase > SQLite > PostgreSQL
+    # Get database interface in priority order: Supabase > SQLite > PostgreSQL
     # Only use databases that are actually connected
     db_interface = None
     for db_name in ["supabase", "sqlite", "postgresql"]:
