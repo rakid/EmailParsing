@@ -539,9 +539,12 @@ class SupabaseDatabaseInterface(DatabaseInterface):
 
     def _processed_email_to_supabase(self, email: ProcessedEmail) -> Dict[str, Any]:
         """Convert ProcessedEmail to Supabase format."""
+        # Use default user ID if none set (for webhook processing)
+        user_id = self.current_user_id or "00000000-0000-0000-0000-000000000000"
+
         return {
             "id": email.id,
-            "user_id": self.current_user_id,
+            "user_id": user_id,
             "message_id": email.email_data.message_id,
             "from_email": email.email_data.from_email,
             "to_emails": email.email_data.to_emails,

@@ -1095,6 +1095,38 @@ async def debug_mcp_connection():
     return debug_info
 
 
+@app.get("/debug/supabase-emails", tags=["Debug"])
+async def debug_supabase_emails():
+    """Check emails stored in Supabase database."""
+    if not INTEGRATIONS_AVAILABLE:
+        return {"error": "Integrations not available"}
+
+    supabase_db = integration_registry.get_database("supabase")
+    if not supabase_db:
+        return {"error": "Supabase database not configured"}
+
+    try:
+        # Try to query emails directly from Supabase
+        response = supabase_db.client.table("emails").select("*").limit(10).execute()
+
+        default_user_id = "00000000-0000-0000-0000-000000000000"
+        return {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "supabase_emails": {
+                "count": len(response.data),
+                "emails": response.data,
+                "user_id_used": supabase_db.current_user_id or default_user_id
+            }
+        }
+
+    except Exception as e:
+        default_user_id = "00000000-0000-0000-0000-000000000000"
+        return {
+            "error": f"Failed to query Supabase: {str(e)}",
+            "user_id_used": supabase_db.current_user_id or default_user_id
+        }
+
+
 @app.get("/debug/supabase-status", tags=["Debug"])
 async def debug_supabase_status():
     """Check Supabase configuration and connectivity."""
