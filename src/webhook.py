@@ -1111,6 +1111,76 @@ async def debug_mcp_connection():
     return debug_info
 
 
+@app.get("/debug/supabase-detailed", tags=["Debug"])
+async def debug_supabase_detailed():
+    """Detailed Supabase connection and configuration test."""
+    result = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "environment_vars": {
+            "SUPABASE_URL": os.getenv("SUPABASE_URL", "NOT_SET")[:50] + "..." if os.getenv("SUPABASE_URL") else "NOT_SET",
+            "SUPABASE_ANON_KEY": "SET" if os.getenv("SUPABASE_ANON_KEY") else "NOT_SET",
+            "SUPABASE_SERVICE_ROLE_KEY": "SET" if os.getenv("SUPABASE_SERVICE_ROLE_KEY") else "NOT_SET"
+        },
+        "import_test": {
+            "supabase_module": False,
+            "create_client": False,
+            "error": None
+        },
+        "config_test": {
+            "config_created": False,
+            "is_configured": False,
+            "url": None,
+            "key_length": 0,
+            "error": None
+        },
+        "client_creation": {
+            "attempted": False,
+            "success": False,
+            "client_type": None,
+            "error": None
+        }
+    }
+
+    # Test imports
+    try:
+        from supabase import create_client
+        result["import_test"]["supabase_module"] = True
+        result["import_test"]["create_client"] = True
+    except ImportError as e:
+        result["import_test"]["error"] = f"Import error: {str(e)}"
+    except Exception as e:
+        result["import_test"]["error"] = f"Unexpected error: {str(e)}"
+
+    # Test config
+    try:
+        from .supabase_integration.config import SupabaseConfig
+        config = SupabaseConfig()
+        result["config_test"]["config_created"] = True
+        result["config_test"]["is_configured"] = config.is_configured()
+        result["config_test"]["url"] = config.supabase_url[:50] + "..." if config.supabase_url else None
+        result["config_test"]["key_length"] = len(config.supabase_key) if config.supabase_key else 0
+    except Exception as e:
+        result["config_test"]["error"] = str(e)
+
+    # Test client creation
+    if result["import_test"]["create_client"] and result["config_test"]["is_configured"]:
+        try:
+            result["client_creation"]["attempted"] = True
+            url = os.getenv("SUPABASE_URL")
+            key = os.getenv("SUPABASE_ANON_KEY")
+
+            if url and key:
+                client = create_client(url, key)
+                result["client_creation"]["success"] = True
+                result["client_creation"]["client_type"] = str(type(client))
+            else:
+                result["client_creation"]["error"] = "URL or key missing"
+        except Exception as e:
+            result["client_creation"]["error"] = str(e)
+
+    return result
+
+
 @app.get("/debug/supabase-connect", tags=["Debug"])
 async def debug_supabase_connect():
     """Test Supabase connection and initialization."""
