@@ -322,19 +322,30 @@ async def _save_to_database(
     if not INTEGRATIONS_AVAILABLE:
         return
 
-    # SIMPLIFIED: Use SQLite as primary database (it works!)
-    # Supabase integration can be added later when needed
-    db_interface = integration_registry.get_database("sqlite")
+    # FORCE SUPABASE CONNECTION ON DEMAND
+    db_interface = integration_registry.get_database("supabase")
 
     if db_interface:
-        logger.info(f"Using SQLite database for storage (reliable and working)")
+        # Force connection if not connected
+        if not getattr(db_interface, '_connected', False):
+            try:
+                logger.info("🔄 Forcing Supabase connection on demand...")
+                await db_interface.connect("")
+                logger.info(f"✅ Supabase connected: {db_interface._connected}")
+            except Exception as e:
+                logger.error(f"❌ Supabase connection failed: {e}")
+                # Fallback to SQLite
+                db_interface = integration_registry.get_database("sqlite")
+                logger.info("🔄 Falling back to SQLite")
+
+        if db_interface:
+            class_name = db_interface.__class__.__name__
+            db_name = "supabase" if "Supabase" in class_name else "sqlite"
+            logger.info(f"📊 Using {db_name} for email storage")
     else:
-        logger.error("SQLite database interface not available")
-        # Fallback to any available database
-        db_interface = (
-            integration_registry.get_database("supabase") or
-            integration_registry.get_database("postgresql")
-        )
+        logger.error("❌ No Supabase interface available")
+        # Fallback to SQLite
+        db_interface = integration_registry.get_database("sqlite")
 
     if db_interface:
         try:
