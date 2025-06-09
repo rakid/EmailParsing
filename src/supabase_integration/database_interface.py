@@ -52,7 +52,7 @@ class SupabaseDatabaseInterface(DatabaseInterface):
 
     async def connect(self, connection_string: Optional[str] = None) -> None:
         """
-        Establish connection to Supabase (lazy initialization).
+        Establish connection to Supabase (force connection).
 
         Args:
             connection_string: Optional override for connection (uses config by default)
@@ -61,8 +61,16 @@ class SupabaseDatabaseInterface(DatabaseInterface):
         if not self.config.is_configured():
             raise ConnectionError("Supabase URL and API key are required")
 
-        # Mark as connected without creating client (lazy loading)
-        self._connected = True
+        # Force client creation and mark as connected
+        try:
+            self._ensure_client()
+            self._connected = True
+            client_type = type(self.client).__name__
+            print(f"✅ Supabase connected successfully! Client: {client_type}")
+        except Exception as e:
+            self._connected = False
+            print(f"❌ Supabase connection failed: {e}")
+            raise ConnectionError(f"Failed to connect to Supabase: {str(e)}") from e
 
     def _ensure_client(self):
         """Ensure Supabase client is created (lazy initialization)."""
@@ -76,7 +84,8 @@ class SupabaseDatabaseInterface(DatabaseInterface):
             except Exception as e:
                 # Fallback: mark as unavailable and use SQLite instead
                 self._connected = False
-                raise RuntimeError(f"Supabase client creation failed due to memory constraints: {str(e)}") from e
+                error_msg = "Supabase client creation failed due to memory constraints"
+                raise RuntimeError(f"{error_msg}: {str(e)}") from e
 
     def _create_http_client(self):
         """Create an ultra-lightweight HTTP client using urllib."""

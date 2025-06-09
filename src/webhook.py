@@ -322,27 +322,19 @@ async def _save_to_database(
     if not INTEGRATIONS_AVAILABLE:
         return
 
-    # Get database interface in priority order: Supabase > SQLite > PostgreSQL
-    # Only use databases that are actually connected
-    db_interface = None
-    for db_name in ["supabase", "sqlite", "postgresql"]:
-        candidate_db = integration_registry.get_database(db_name)
-        if candidate_db and getattr(candidate_db, '_connected', False):
-            db_interface = candidate_db
-            logger.info(f"Selected {db_name} database for storage (connected)")
-            break
+    # SIMPLIFIED: Use SQLite as primary database (it works!)
+    # Supabase integration can be added later when needed
+    db_interface = integration_registry.get_database("sqlite")
 
-    # Fallback: if no connected database, use first available
-    if not db_interface:
+    if db_interface:
+        logger.info(f"Using SQLite database for storage (reliable and working)")
+    else:
+        logger.error("SQLite database interface not available")
+        # Fallback to any available database
         db_interface = (
             integration_registry.get_database("supabase") or
-            integration_registry.get_database("sqlite") or
             integration_registry.get_database("postgresql")
         )
-        if db_interface:
-            logger.warning(f"Using {db_interface.__class__.__name__} database (not connected)")
-        else:
-            logger.error("No database interface available")
 
     if db_interface:
         try:
