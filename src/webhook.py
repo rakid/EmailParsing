@@ -86,16 +86,32 @@ app = FastAPI(
     lifespan=config.lifespan_manager,
 )
 
-# Initialize SQLite on startup
+# Initialize databases on startup
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on application startup."""
-    if INTEGRATIONS_AVAILABLE and '_sqlite_init' in globals():
+    if INTEGRATIONS_AVAILABLE:
+        # Initialize SQLite
+        if '_sqlite_init' in globals():
+            try:
+                await _sqlite_init()
+                logger.info("SQLite database connection established")
+            except Exception as e:
+                logger.error(f"Failed to initialize SQLite on startup: {e}")
+
+        # Initialize Supabase
         try:
-            await _sqlite_init()
-            logger.info("SQLite database connection established")
+            supabase_db = integration_registry.get_database("supabase")
+            has_url = os.getenv("SUPABASE_URL")
+            has_key = os.getenv("SUPABASE_ANON_KEY")
+            if supabase_db and has_url and has_key:
+                # Connect to Supabase
+                await supabase_db.connect("")  # Empty string as it uses env vars
+                logger.info("Supabase database connection established")
+            else:
+                logger.warning("Supabase not configured - missing URL or API key")
         except Exception as e:
-            logger.error(f"Failed to initialize SQLite on startup: {e}")
+            logger.error(f"Failed to initialize Supabase on startup: {e}")
 
 # --- Webhook Utility Functions ---
 
@@ -1093,6 +1109,51 @@ async def debug_mcp_connection():
         debug_info["mcp_server"]["error"] = f"MCP server error: {str(e)}"
 
     return debug_info
+
+
+@app.get("/debug/supabase-connect", tags=["Debug"])
+async def debug_supabase_connect():
+    """Test Supabase connection and initialization."""
+    if not INTEGRATIONS_AVAILABLE:
+        return {"error": "Integrations not available"}
+
+    supabase_db = integration_registry.get_database("supabase")
+    if not supabase_db:
+        return {"error": "Supabase database not registered"}
+
+    result = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "supabase_interface": {
+            "registered": True,
+            "class": supabase_db.__class__.__name__,
+            "client_exists": supabase_db.client is not None,
+            "connected": getattr(supabase_db, '_connected', False),
+            "current_user_id": supabase_db.current_user_id
+        },
+        "environment": {
+            "url": bool(os.getenv("SUPABASE_URL")),
+            "anon_key": bool(os.getenv("SUPABASE_ANON_KEY")),
+            "service_key": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
+        },
+        "connection_test": {
+            "attempted": False,
+            "success": False,
+            "error": None
+        }
+    }
+
+    # Try to connect if not connected
+    if not supabase_db.client:
+        try:
+            result["connection_test"]["attempted"] = True
+            await supabase_db.connect("")
+            result["connection_test"]["success"] = True
+            result["supabase_interface"]["client_exists"] = supabase_db.client is not None
+            result["supabase_interface"]["connected"] = getattr(supabase_db, '_connected', False)
+        except Exception as e:
+            result["connection_test"]["error"] = str(e)
+
+    return result
 
 
 @app.get("/debug/supabase-emails", tags=["Debug"])
