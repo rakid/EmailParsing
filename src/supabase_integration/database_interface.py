@@ -52,39 +52,35 @@ class SupabaseDatabaseInterface(DatabaseInterface):
 
     async def connect(self, connection_string: Optional[str] = None) -> None:
         """
-        Establish connection to Supabase.
+        Establish connection to Supabase (lazy initialization).
 
         Args:
             connection_string: Optional override for connection (uses config by default)
         """
-        try:
-            # Check if configuration is available
-            if not self.config.is_configured():
-                raise ConnectionError("Supabase URL and API key are required")
+        # Check if configuration is available
+        if not self.config.is_configured():
+            raise ConnectionError("Supabase URL and API key are required")
 
-            # Create Supabase client
+        # Mark as connected without creating client (lazy loading)
+        self._connected = True
+
+    def _ensure_client(self):
+        """Ensure Supabase client is created (lazy initialization)."""
+        if self.client is None:
             if not self.config.supabase_url or not self.config.supabase_key:
-                raise ConnectionError("Supabase URL and API key are required")
-            self.client = create_client(
-                self.config.supabase_url, self.config.supabase_key
-            )
+                raise RuntimeError("Supabase URL and API key are required")
 
-            # Test connection with a simple query
             try:
-                _ = (
-                    self.client.table(self.config.TABLES["emails"])
-                    .select("id")
-                    .limit(1)
-                    .execute()
+                self.client = create_client(
+                    self.config.supabase_url, self.config.supabase_key
                 )
-                self._connected = True
-            except Exception:
-                # If table doesn't exist or we can't access it, that's expected
-                # We'll consider client creation success as successful connection
-                self._connected = True
-
-        except Exception as e:
-            raise ConnectionError(f"Failed to connect to Supabase: {str(e)}") from e
+            except MemoryError:
+                # Fallback: mark as unavailable and use SQLite instead
+                self._connected = False
+                raise RuntimeError("Supabase client creation failed due to memory constraints")
+            except Exception as e:
+                self._connected = False
+                raise RuntimeError(f"Failed to create Supabase client: {str(e)}") from e
 
     async def store_email(self, email: ProcessedEmail) -> str:
         """
@@ -96,8 +92,15 @@ class SupabaseDatabaseInterface(DatabaseInterface):
         Returns:
             Email ID of stored email
         """
-        if not self._connected or not self.client:
+        if not self._connected:
             raise RuntimeError("Database not connected")
+
+        # Lazy load client
+        try:
+            self._ensure_client()
+        except RuntimeError as e:
+            # If Supabase fails, let the system fall back to SQLite
+            raise e
 
         try:
             # Prepare email data for Supabase

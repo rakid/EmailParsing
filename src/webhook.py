@@ -99,19 +99,19 @@ async def startup_event():
             except Exception as e:
                 logger.error(f"Failed to initialize SQLite on startup: {e}")
 
-        # Initialize Supabase
+        # Initialize Supabase (lazy loading - just check config)
         try:
             supabase_db = integration_registry.get_database("supabase")
             has_url = os.getenv("SUPABASE_URL")
             has_key = os.getenv("SUPABASE_ANON_KEY")
             if supabase_db and has_url and has_key:
-                # Connect to Supabase
-                await supabase_db.connect("")  # Empty string as it uses env vars
-                logger.info("Supabase database connection established")
+                # Just mark as ready for lazy loading (don't create client yet)
+                await supabase_db.connect("")  # This now just validates config
+                logger.info("Supabase database configured for lazy loading")
             else:
                 logger.warning("Supabase not configured - missing URL or API key")
         except Exception as e:
-            logger.error(f"Failed to initialize Supabase on startup: {e}")
+            logger.error(f"Failed to configure Supabase: {e}")
 
 # --- Webhook Utility Functions ---
 
@@ -1179,6 +1179,44 @@ async def debug_supabase_detailed():
             import traceback
             result["client_creation"]["error"] = str(e)
             result["client_creation"]["traceback"] = traceback.format_exc()
+
+    return result
+
+
+@app.get("/debug/supabase-lazy-test", tags=["Debug"])
+async def debug_supabase_lazy_test():
+    """Test Supabase lazy loading approach."""
+    if not INTEGRATIONS_AVAILABLE:
+        return {"error": "Integrations not available"}
+
+    supabase_db = integration_registry.get_database("supabase")
+    if not supabase_db:
+        return {"error": "Supabase database not registered"}
+
+    result = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "lazy_loading_test": {
+            "interface_available": True,
+            "connected": supabase_db._connected,
+            "client_exists": supabase_db.client is not None,
+            "config_valid": supabase_db.config.is_configured()
+        },
+        "client_creation_test": {
+            "attempted": False,
+            "success": False,
+            "error": None
+        }
+    }
+
+    # Test lazy client creation
+    try:
+        result["client_creation_test"]["attempted"] = True
+        supabase_db._ensure_client()
+        result["client_creation_test"]["success"] = True
+        result["lazy_loading_test"]["client_exists"] = supabase_db.client is not None
+    except Exception as e:
+        result["client_creation_test"]["error"] = str(e)
+        result["client_creation_test"]["error_type"] = type(e).__name__
 
     return result
 
