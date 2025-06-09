@@ -313,11 +313,26 @@ async def _save_to_database(
         return
 
     # Attempt to get database interface in priority order: Supabase > SQLite > PostgreSQL
-    db_interface = (
-        integration_registry.get_database("supabase") or
-        integration_registry.get_database("sqlite") or
-        integration_registry.get_database("postgresql")
-    )
+    # Only use databases that are actually connected
+    db_interface = None
+    for db_name in ["supabase", "sqlite", "postgresql"]:
+        candidate_db = integration_registry.get_database(db_name)
+        if candidate_db and getattr(candidate_db, '_connected', False):
+            db_interface = candidate_db
+            logger.info(f"Selected {db_name} database for storage (connected)")
+            break
+
+    # Fallback: if no connected database, use first available
+    if not db_interface:
+        db_interface = (
+            integration_registry.get_database("supabase") or
+            integration_registry.get_database("sqlite") or
+            integration_registry.get_database("postgresql")
+        )
+        if db_interface:
+            logger.warning(f"Using {db_interface.__class__.__name__} database (not connected)")
+        else:
+            logger.error("No database interface available")
 
     if db_interface:
         try:
@@ -1497,6 +1512,63 @@ async def debug_supabase_connect():
             result["supabase_interface"]["connected"] = getattr(supabase_db, '_connected', False)
         except Exception as e:
             result["connection_test"]["error"] = str(e)
+
+    return result
+
+
+@app.get("/debug/storage-priority", tags=["Debug"])
+async def debug_storage_priority():
+    """Check which database storage is being used in priority order."""
+    if not INTEGRATIONS_AVAILABLE:
+        return {"error": "Integrations not available"}
+
+    result = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "storage_priority_test": {
+            "integrations_available": INTEGRATIONS_AVAILABLE,
+            "databases_checked": [],
+            "primary_database": None,
+            "primary_database_type": None,
+            "primary_database_connected": False
+        }
+    }
+
+    # Test database priority order (same as in webhook processing)
+    for db_name in ["supabase", "sqlite", "postgresql"]:
+        db_interface = integration_registry.get_database(db_name)
+        db_info = {
+            "name": db_name,
+            "available": db_interface is not None,
+            "connected": getattr(db_interface, '_connected', False) if db_interface else False,
+            "class": db_interface.__class__.__name__ if db_interface else None
+        }
+
+        result["storage_priority_test"]["databases_checked"].append(db_info)
+
+        # First available and connected database becomes primary
+        if (db_interface and
+            result["storage_priority_test"]["primary_database"] is None and
+            getattr(db_interface, '_connected', False)):
+            result["storage_priority_test"]["primary_database"] = db_name
+            result["storage_priority_test"]["primary_database_type"] = db_interface.__class__.__name__
+            result["storage_priority_test"]["primary_database_connected"] = True
+
+    # Test the actual database selection logic used in webhook
+    try:
+        db_interface = (
+            integration_registry.get_database("supabase") or
+            integration_registry.get_database("sqlite") or
+            integration_registry.get_database("postgresql")
+        )
+
+        if db_interface:
+            result["storage_priority_test"]["actual_selected"] = {
+                "class": db_interface.__class__.__name__,
+                "connected": getattr(db_interface, '_connected', False),
+                "client_exists": getattr(db_interface, 'client', None) is not None
+            }
+    except Exception as e:
+        result["storage_priority_test"]["selection_error"] = str(e)
 
     return result
 
