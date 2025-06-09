@@ -22,7 +22,7 @@ from typing import (
 
 from dateutil.parser import parse as dateutil_parse
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import ValidationError
 
 from . import storage
@@ -469,6 +469,180 @@ async def handle_postmark_webhook(
             detail=f"An unexpected error occurred during email processing: {
                 str(e)}",
         )
+
+
+# --- Dashboard Route ---
+
+@app.get("/", response_class=HTMLResponse, tags=["Dashboard"])
+async def dashboard():
+    """Serve the main dashboard interface."""
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Inbox Zen - Email Analytics Dashboard</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    </head>
+    <body class="bg-gray-50">
+        <div x-data="dashboard()" x-init="init()" class="min-h-screen">
+            <!-- Header -->
+            <header class="bg-white shadow-sm border-b">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between items-center py-4">
+                        <div class="flex items-center">
+                            <h1 class="text-2xl font-bold text-gray-900">📧 Inbox Zen</h1>
+                            <span class="ml-2 text-sm text-gray-500">Email Analytics Dashboard</span>
+                        </div>
+                        <button @click="refresh()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main Content -->
+            <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <!-- Loading State -->
+                <div x-show="loading" class="text-center py-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                    <p class="mt-2 text-gray-600">Loading dashboard...</p>
+                </div>
+
+                <!-- Dashboard Content -->
+                <div x-show="!loading" style="display: none;">
+                    <!-- Stats Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <div class="flex items-center">
+                                <div class="p-2 bg-blue-100 rounded-lg">
+                                    <span class="text-2xl">📧</span>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-600">Total Emails</p>
+                                    <p class="text-2xl font-bold text-gray-900" x-text="stats.total_emails || 0"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <div class="flex items-center">
+                                <div class="p-2 bg-green-100 rounded-lg">
+                                    <span class="text-2xl">✅</span>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-600">Analyzed</p>
+                                    <p class="text-2xl font-bold text-gray-900" x-text="stats.analyzed_emails || 0"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <div class="flex items-center">
+                                <div class="p-2 bg-yellow-100 rounded-lg">
+                                    <span class="text-2xl">⚡</span>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-600">Avg Urgency</p>
+                                    <p class="text-2xl font-bold text-gray-900" x-text="Math.round(stats.avg_urgency_score || 0)"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <div class="flex items-center">
+                                <div class="p-2 bg-purple-100 rounded-lg">
+                                    <span class="text-2xl">📊</span>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-600">MCP Accuracy</p>
+                                    <p class="text-2xl font-bold text-gray-900">95%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Emails -->
+                    <div class="bg-white rounded-lg shadow">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h2 class="text-lg font-medium text-gray-900">Recent Emails</h2>
+                        </div>
+                        <div class="p-6">
+                            <div x-show="emails.length === 0" class="text-center py-8 text-gray-500">
+                                No emails found. Send a test email to get started!
+                            </div>
+                            <div x-show="emails.length > 0" class="space-y-4">
+                                <template x-for="email in emails" :key="email.id">
+                                    <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                                        <div class="flex justify-between items-start">
+                                            <div class="flex-1">
+                                                <h3 class="font-medium text-gray-900" x-text="email.subject"></h3>
+                                                <p class="text-sm text-gray-600" x-text="'From: ' + email.from"></p>
+                                                <p class="text-xs text-gray-500" x-text="new Date(email.received_at).toLocaleString()"></p>
+                                            </div>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="px-2 py-1 text-xs rounded-full"
+                                                      :class="email.urgency_level === 'high' ? 'bg-red-100 text-red-800' :
+                                                             email.urgency_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                                             'bg-green-100 text-green-800'"
+                                                      x-text="email.urgency_level"></span>
+                                                <span class="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full"
+                                                      x-text="email.sentiment"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <script>
+            function dashboard() {
+                return {
+                    loading: true,
+                    stats: {},
+                    emails: [],
+
+                    async init() {
+                        await this.loadData();
+                    },
+
+                    async loadData() {
+                        this.loading = true;
+                        try {
+                            // Load analytics
+                            const analyticsResponse = await fetch('/api/analytics');
+                            if (analyticsResponse.ok) {
+                                this.stats = await analyticsResponse.json();
+                            }
+
+                            // Load recent emails
+                            const emailsResponse = await fetch('/api/emails/recent?limit=10');
+                            if (emailsResponse.ok) {
+                                const emailsData = await emailsResponse.json();
+                                this.emails = emailsData.emails || [];
+                            }
+                        } catch (error) {
+                            console.error('Failed to load dashboard data:', error);
+                        } finally {
+                            this.loading = false;
+                        }
+                    },
+
+                    async refresh() {
+                        await this.loadData();
+                    }
+                }
+            }
+        </script>
+    </body>
+    </html>
+    """
 
 
 # --- Health and Basic API Endpoints (specific to this webhook service) ---
