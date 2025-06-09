@@ -409,3 +409,135 @@ async def get_analytics():
     except Exception as e:
         logger.error(f"Error generating analytics: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate analytics")
+
+
+# --- Email Routing API Routes ---
+
+@router.get("/routing/stats")
+async def get_routing_stats():
+    """Get email routing statistics and configuration."""
+    try:
+        from .email_routing import email_router
+
+        routing_stats = email_router.get_routing_stats()
+
+        # Add runtime statistics
+        emails = list(storage.email_storage.values())
+        routed_emails = [
+            email for email in emails
+            if email.email_data.headers and email.email_data.headers.get("X-Routing-Rule")
+        ]
+
+        routing_stats.update({
+            "runtime_stats": {
+                "total_emails_processed": len(emails),
+                "emails_routed": len(routed_emails),
+                "routing_rate": len(routed_emails) / len(emails) if emails else 0,
+                "inbound_addresses_seen": len(set(
+                    email.email_data.inbound_email_address
+                    for email in emails
+                    if email.email_data.inbound_email_address
+                ))
+            }
+        })
+
+        return routing_stats
+
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Email routing module not available")
+    except Exception as e:
+        logger.error(f"Error retrieving routing stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve routing statistics")
+
+
+@router.get("/routing/rules")
+async def get_routing_rules():
+    """Get all email routing rules."""
+    try:
+        from .email_routing import email_router
+
+        return {
+            "rules": [
+                {
+                    "name": rule.name,
+                    "description": rule.description,
+                    "inbound_addresses": rule.inbound_addresses,
+                    "action": rule.action,
+                    "priority": rule.priority,
+                    "enabled": rule.enabled,
+                    "metadata": rule.metadata
+                }
+                for rule in email_router.rules
+            ]
+        }
+
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Email routing module not available")
+    except Exception as e:
+        logger.error(f"Error retrieving routing rules: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve routing rules")
+
+
+@router.get("/emails/by-inbound-address")
+async def get_emails_by_inbound_address(
+    inbound_address: Optional[str] = Query(None, description="Filter by inbound email address"),
+    limit: int = Query(10, ge=1, le=100)
+):
+    """Get emails filtered by inbound email address."""
+    try:
+        emails = list(storage.email_storage.values())
+
+        # Filter by inbound address if specified
+        if inbound_address:
+            emails = [
+                email for email in emails
+                if email.email_data.inbound_email_address == inbound_address
+            ]
+
+        # Sort by received time, most recent first
+        emails.sort(
+            key=lambda x: x.email_data.received_at,
+            reverse=True
+        )
+
+        # Apply limit
+        limited_emails = emails[:limit]
+
+        # Get unique inbound addresses for reference
+        unique_addresses = list(set(
+            email.email_data.inbound_email_address
+            for email in storage.email_storage.values()
+            if email.email_data.inbound_email_address
+        ))
+
+        return {
+            "filter": inbound_address,
+            "total_found": len(emails),
+            "returned": len(limited_emails),
+            "available_inbound_addresses": unique_addresses,
+            "emails": [
+                {
+                    "id": email.id,
+                    "subject": email.email_data.subject,
+                    "from": email.email_data.from_email,
+                    "inbound_email_address": email.email_data.inbound_email_address,
+                    "original_recipient": email.email_data.original_recipient,
+                    "received_at": email.email_data.received_at.isoformat(),
+                    "routing_rule": email.email_data.headers.get("X-Routing-Rule") if email.email_data.headers else None,
+                    "routing_action": email.email_data.headers.get("X-Routing-Action") if email.email_data.headers else None,
+                    "urgency_level": (
+                        email.analysis.urgency_level.value
+                        if email.analysis
+                        else "unknown"
+                    ),
+                    "sentiment": (
+                        email.analysis.sentiment if email.analysis else "neutral"
+                    ),
+                }
+                for email in limited_emails
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Error retrieving emails by inbound address: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve emails by inbound address")

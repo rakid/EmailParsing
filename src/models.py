@@ -50,6 +50,23 @@ class EmailData(BaseModel):
     )
     headers: Dict[str, str] = Field(default={}, description="Email headers")
 
+    # Inbound email routing
+    inbound_email_address: Optional[str] = Field(
+        None, description="Postmark inbound email address (MailboxHash)"
+    )
+    original_recipient: Optional[str] = Field(
+        None, description="Original recipient before forwarding"
+    )
+
+    # Email security and quality
+    spam_score: Optional[float] = Field(None, description="Spam score from provider")
+    virus_detected: Optional[bool] = Field(None, description="Virus detection result")
+
+    # Additional metadata
+    reply_to: Optional[str] = Field(None, description="Reply-To header")
+    message_stream: Optional[str] = Field(None, description="Postmark message stream")
+    tag: Optional[str] = Field(None, description="Postmark tag")
+
 
 class EmailAnalysis(BaseModel):
     """Email analysis results"""
@@ -114,3 +131,20 @@ class PostmarkWebhookPayload(BaseModel):
     Attachments: List[Dict[str, Any]] = Field(default=[])
     Tag: Optional[str] = None
     MessageStream: Optional[str] = None
+
+    # Inbound email routing fields
+    MailboxHash: Optional[str] = Field(None, description="Postmark inbound email address hash")
+    OriginalRecipient: Optional[str] = Field(None, description="Original recipient email address")
+
+    # Spam and virus detection
+    SpamScore: Optional[float] = Field(None, description="Spam score from Postmark")
+    VirusDetected: Optional[bool] = Field(None, description="Whether virus was detected")
+
+    # Additional Postmark fields
+    ReplyTo: Optional[str] = Field(None, description="Reply-To header")
+    RawEmail: Optional[str] = Field(None, description="Raw email content (if enabled)")
+
+    @property
+    def inbound_email_address(self) -> Optional[str]:
+        """Get the inbound email address hash (alias for MailboxHash)"""
+        return self.MailboxHash

@@ -50,9 +50,30 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import integration capabilities
 try:
-    from .integrations import integration_registry
+    from .integrations import integration_registry, SQLiteInterface
 
     INTEGRATIONS_AVAILABLE = True
+
+    # Initialize SQLite database for persistent storage
+    try:
+        sqlite_db = SQLiteInterface()
+        # Use /tmp for serverless environments, or local file for development
+        db_path = "/tmp/emails.db" if os.getenv("VERCEL") else "emails.db"
+
+        # Register the SQLite interface
+        integration_registry.register_database("sqlite", sqlite_db)
+        logger.info(f"SQLite database initialized at {db_path}")
+
+        # Initialize the database asynchronously when the app starts
+        async def init_sqlite():
+            await sqlite_db.connect(db_path)
+
+        # Store the init function to call it during startup
+        _sqlite_init = init_sqlite
+
+    except Exception as e:
+        logger.warning(f"Failed to initialize SQLite database: {e}")
+
 except ImportError:
     INTEGRATIONS_AVAILABLE = False
     logger.warning("Integration module not available - running without plugin support")
@@ -64,6 +85,17 @@ app = FastAPI(
     version=config.server_version,
     lifespan=config.lifespan_manager,
 )
+
+# Initialize SQLite on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on application startup."""
+    if INTEGRATIONS_AVAILABLE and '_sqlite_init' in globals():
+        try:
+            await _sqlite_init()
+            logger.info("SQLite database connection established")
+        except Exception as e:
+            logger.error(f"Failed to initialize SQLite on startup: {e}")
 
 # --- Webhook Utility Functions ---
 
@@ -153,6 +185,19 @@ def extract_email_data(
         received_at=received_at_utc,
         attachments=attachments,
         headers=headers,
+
+        # Inbound email routing
+        inbound_email_address=webhook_payload.MailboxHash,
+        original_recipient=webhook_payload.OriginalRecipient,
+
+        # Email security and quality
+        spam_score=webhook_payload.SpamScore,
+        virus_detected=webhook_payload.VirusDetected,
+
+        # Additional metadata
+        reply_to=webhook_payload.ReplyTo,
+        message_stream=webhook_payload.MessageStream,
+        tag=webhook_payload.Tag,
     )
 
 
@@ -316,6 +361,17 @@ async def handle_postmark_webhook(
         )  # Generate unique ID for this processing instance
 
         email_data = extract_email_data(webhook_payload)
+
+        # Apply email routing based on inbound address
+        try:
+            from .email_routing import route_email_by_inbound_address
+            email_data = await route_email_by_inbound_address(email_data)
+            logger.info(f"Email routing applied for inbound address: {email_data.inbound_email_address}")
+        except ImportError:
+            logger.debug("Email routing module not available")
+        except Exception as e:
+            logger.warning(f"Email routing failed, continuing with normal processing: {e}")
+
         logger.log_email_received(
             email_data, webhook_payload.model_dump()
         )  # Pass dict for logging
@@ -347,19 +403,28 @@ async def handle_postmark_webhook(
             webhook_payload=payload_data,  # Store original payload if needed later
         )
 
+        # Store email in memory storage for MCP access
         storage.email_storage[processing_id] = processed_email
+        logger.info(f"Email {processing_id} stored in memory storage. Total emails: {len(storage.email_storage)}")
 
         # Enhance email with plugins
         processed_email = await _process_through_plugins(processed_email, processing_id)
         storage.email_storage[processing_id] = (
             processed_email  # Re-store if plugins modified it
         )
+        logger.info(f"Email {processing_id} re-stored after plugin processing")
 
         await _save_to_database(processed_email, processing_id)
 
         processing_time_taken = time.time() - processing_start_time
         _update_stats(processing_time_taken)
         logger.log_email_processed(processed_email, processing_time_taken)
+
+        # Final verification that email is stored
+        if processing_id in storage.email_storage:
+            logger.info(f"✅ Email {processing_id} successfully stored and accessible via MCP")
+        else:
+            logger.error(f"❌ Email {processing_id} NOT found in storage after processing!")
 
         return JSONResponse(
             status_code=200,
@@ -423,6 +488,1223 @@ async def detailed_health_check():
         "errors_logged": storage.stats.total_errors,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/health/services", tags=["Monitoring"])
+async def services_health_check(skip_connectivity_tests: bool = False):
+    """
+    Comprehensive health check for all external services and configurations.
+
+    Args:
+        skip_connectivity_tests: Skip memory-intensive connectivity tests (useful for serverless)
+
+    Checks:
+    - SambaNova AI configuration and connectivity
+    - Supabase database configuration and connectivity
+    - Postmark webhook configuration
+    - Environment variables status
+    """
+    health_status = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "overall_status": "healthy",
+        "services": {},
+        "configuration": {},
+        "missing_config": [],
+        "warnings": []
+    }
+
+    # Check SambaNova AI Service
+    sambanova_status = await _check_sambanova_service(skip_connectivity_tests)
+    health_status["services"]["sambanova"] = sambanova_status
+
+    # Check Supabase Database Service
+    supabase_status = await _check_supabase_service(skip_connectivity_tests)
+    health_status["services"]["supabase"] = supabase_status
+
+    # Check Postmark Configuration
+    postmark_status = _check_postmark_config()
+    health_status["services"]["postmark"] = postmark_status
+
+    # Check Environment Configuration
+    env_status = _check_environment_config()
+    health_status["configuration"] = env_status
+
+    # Collect missing configurations
+    for service_name, service_info in health_status["services"].items():
+        if service_info.get("missing_config"):
+            health_status["missing_config"].extend([
+                f"{service_name}.{key}" for key in service_info["missing_config"]
+            ])
+
+    # Collect warnings
+    for service_name, service_info in health_status["services"].items():
+        if service_info.get("warnings"):
+            health_status["warnings"].extend([
+                f"{service_name}: {warning}" for warning in service_info["warnings"]
+            ])
+
+    # Determine overall status
+    service_statuses = [s["status"] for s in health_status["services"].values()]
+    if "error" in service_statuses:
+        health_status["overall_status"] = "degraded"
+    elif "warning" in service_statuses:
+        health_status["overall_status"] = "warning"
+
+    return health_status
+
+
+@app.get("/health/services/detailed", tags=["Health"])
+async def get_detailed_services_health():
+    """Get detailed health status with comprehensive error analysis and troubleshooting."""
+    try:
+        # Get basic health status
+        basic_health = await services_health_check()
+
+        # Enhance with additional troubleshooting information
+        detailed_health = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "overall_status": basic_health["overall_status"],
+            "services": basic_health["services"],
+            "configuration": basic_health["configuration"],
+            "missing_config": basic_health["missing_config"],
+            "warnings": basic_health["warnings"],
+            "troubleshooting": {
+                "common_issues": [],
+                "quick_fixes": [],
+                "documentation_links": {},
+                "environment_analysis": {}
+            },
+            "system_info": {
+                "python_version": (
+                    f"{sys.version_info.major}.{sys.version_info.minor}."
+                    f"{sys.version_info.micro}"
+                ),
+                "platform": os.name,
+                "environment": os.getenv("ENVIRONMENT", "development"),
+                "deployment_type": "vercel" if os.getenv("VERCEL") else "local"
+            }
+        }
+
+        # Analyze common issues and provide solutions
+        all_errors = []
+        for service_name, service_info in basic_health["services"].items():
+            if service_info.get("errors"):
+                for error in service_info["errors"]:
+                    error["service"] = service_name
+                    all_errors.append(error)
+
+        # Group errors by type for better troubleshooting
+        error_groups = {}
+        for error in all_errors:
+            error_type = error.get("type", "unknown")
+            if error_type not in error_groups:
+                error_groups[error_type] = []
+            error_groups[error_type].append(error)
+
+        # Generate troubleshooting recommendations
+        if "configuration_error" in error_groups:
+            detailed_health["troubleshooting"]["common_issues"].append({
+                "issue": "Configuration Errors",
+                "count": len(error_groups["configuration_error"]),
+                "description": "Environment variables are missing or incorrectly configured",
+                "impact": "Services may not function properly or fall back to defaults",
+                "priority": "high"
+            })
+
+            detailed_health["troubleshooting"]["quick_fixes"].append({
+                "title": "Fix Configuration Errors",
+                "steps": [
+                    "Check your environment variables in Vercel dashboard",
+                    "Ensure all required variables are set for production environment",
+                    "Verify variable names match exactly (case-sensitive)",
+                    "Redeploy after making changes: vercel --prod"
+                ],
+                "commands": [
+                    "vercel env ls",
+                    "vercel env add VARIABLE_NAME 'value' production",
+                    "vercel --prod"
+                ]
+            })
+
+        if "dependency_error" in error_groups:
+            detailed_health["troubleshooting"]["common_issues"].append({
+                "issue": "Missing Dependencies",
+                "count": len(error_groups["dependency_error"]),
+                "description": "Required Python packages are not installed",
+                "impact": "Features requiring these dependencies will be disabled",
+                "priority": "medium"
+            })
+
+            missing_deps = set()
+            for error in error_groups["dependency_error"]:
+                if error.get("dependency"):
+                    missing_deps.add(error["dependency"])
+
+            if missing_deps:
+                detailed_health["troubleshooting"]["quick_fixes"].append({
+                    "title": "Install Missing Dependencies",
+                    "steps": [
+                        "Update requirements.txt with missing dependencies",
+                        "Redeploy to install new dependencies"
+                    ],
+                    "commands": [
+                        f"pip install {' '.join(missing_deps)}",
+                        "vercel --prod"
+                    ],
+                    "missing_dependencies": list(missing_deps)
+                })
+
+        # Add documentation links
+        detailed_health["troubleshooting"]["documentation_links"] = {
+            "supabase": "https://supabase.com/docs/guides/getting-started",
+            "sambanova": "https://cloud.sambanova.ai/",
+            "postmark": "https://postmarkapp.com/developer",
+            "vercel_env": "https://vercel.com/docs/concepts/projects/environment-variables",
+            "project_repo": "https://github.com/your-repo/EmailParsing"
+        }
+
+        # Environment analysis
+        env_analysis = {
+            "deployment_environment": os.getenv("ENVIRONMENT", "development"),
+            "is_production": os.getenv("ENVIRONMENT") == "production",
+            "is_vercel": bool(os.getenv("VERCEL")),
+            "has_secrets": bool(os.getenv("POSTMARK_WEBHOOK_SECRET")),
+            "total_env_vars": len([k for k in os.environ.keys() if not k.startswith("_")]),
+            "critical_missing": len([
+                var for var in ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SAMBANOVA_API_KEY"]
+                if not os.getenv(var)
+            ])
+        }
+        detailed_health["troubleshooting"]["environment_analysis"] = env_analysis
+
+        return detailed_health
+
+    except Exception as e:
+        logger.error(f"Error generating detailed health status: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Failed to generate detailed health status",
+                "message": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+
+
+@app.get("/health/services/lite", tags=["Health"])
+async def services_health_check_lite():
+    """
+    Lightweight health check optimized for serverless environments.
+    Skips memory-intensive connectivity tests and imports.
+    """
+    health_status = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "overall_status": "healthy",
+        "services": {},
+        "configuration": {},
+        "missing_config": [],
+        "warnings": [],
+        "mode": "lite"
+    }
+
+    # Lightweight SambaNova check (config only)
+    sambanova_status = _check_sambanova_config_only()
+    health_status["services"]["sambanova"] = sambanova_status
+
+    # Lightweight Supabase check (config only)
+    supabase_status = _check_supabase_config_only()
+    health_status["services"]["supabase"] = supabase_status
+
+    # Check Postmark Configuration (already lightweight)
+    postmark_status = _check_postmark_config()
+    health_status["services"]["postmark"] = postmark_status
+
+    # Check Environment Configuration
+    env_status = _check_environment_config()
+    health_status["configuration"] = env_status
+
+    # Collect missing configurations and warnings
+    for service_name, service_info in health_status["services"].items():
+        if service_info.get("missing_config"):
+            health_status["missing_config"].extend([
+                f"{service_name}.{config}" for config in service_info["missing_config"]
+            ])
+        if service_info.get("warnings"):
+            health_status["warnings"].extend(service_info["warnings"])
+
+    # Determine overall status
+    statuses = [service["status"] for service in health_status["services"].values()]
+    if "error" in statuses:
+        health_status["overall_status"] = "error"
+    elif "warning" in statuses:
+        health_status["overall_status"] = "warning"
+
+    return health_status
+
+
+@app.get("/health/status", tags=["Health"])
+async def simple_health_status():
+    """
+    Ultra-simple health status for monitoring.
+    No imports, no memory-intensive operations.
+    """
+    # Count configured services
+    configured_services = 0
+    total_services = 3
+
+    if os.getenv("SAMBANOVA_API_KEY"):
+        configured_services += 1
+
+    if os.getenv("SUPABASE_URL") and (os.getenv("SUPABASE_ANON_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")):
+        configured_services += 1
+
+    if os.getenv("POSTMARK_WEBHOOK_SECRET"):
+        configured_services += 1
+
+    # Determine status
+    if configured_services == total_services:
+        status = "healthy"
+    elif configured_services > 0:
+        status = "degraded"
+    else:
+        status = "error"
+
+    return {
+        "status": status,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "services_configured": f"{configured_services}/{total_services}",
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "deployment": "vercel" if os.getenv("VERCEL") else "local",
+        "memory_optimized": True
+    }
+
+
+@app.get("/health/errors", tags=["Health"])
+async def get_service_errors():
+    """Get only the errors and critical issues from all services."""
+    try:
+        # Get basic health status
+        basic_health = await services_health_check()
+
+        errors_summary = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "overall_status": basic_health["overall_status"],
+            "total_errors": 0,
+            "total_warnings": 0,
+            "critical_issues": [],
+            "service_errors": {},
+            "missing_configurations": basic_health.get("missing_config", []),
+            "quick_resolution_steps": []
+        }
+
+        # Collect all errors from services
+        for service_name, service_info in basic_health["services"].items():
+            service_errors = {
+                "service_name": service_info["name"],
+                "status": service_info["status"],
+                "errors": service_info.get("errors", []),
+                "warnings": service_info.get("warnings", []),
+                "configured": service_info.get("configured", False),
+                "accessible": service_info.get("accessible", False)
+            }
+
+            errors_summary["service_errors"][service_name] = service_errors
+            errors_summary["total_errors"] += len(service_errors["errors"])
+            errors_summary["total_warnings"] += len(service_errors["warnings"])
+
+            # Identify critical issues
+            for error in service_errors["errors"]:
+                if error.get("priority") == "high":
+                    errors_summary["critical_issues"].append({
+                        "service": service_name,
+                        "type": error.get("type"),
+                        "message": error.get("message"),
+                        "resolution": error.get("resolution"),
+                        "field": error.get("field")
+                    })
+
+        # Generate quick resolution steps
+        if errors_summary["missing_configurations"]:
+            errors_summary["quick_resolution_steps"].append({
+                "step": 1,
+                "title": "Configure Missing Environment Variables",
+                "description": "Set the following environment variables in Vercel",
+                "variables": errors_summary["missing_configurations"],
+                "command": "vercel env add VARIABLE_NAME 'value' production"
+            })
+
+        if errors_summary["total_errors"] > 0:
+            errors_summary["quick_resolution_steps"].append({
+                "step": 2,
+                "title": "Redeploy After Configuration",
+                "description": "Redeploy the application to apply changes",
+                "command": "vercel --prod"
+            })
+
+        # Add priority classification
+        if errors_summary["total_errors"] == 0 and errors_summary["total_warnings"] == 0:
+            errors_summary["priority"] = "none"
+            errors_summary["message"] = "No errors or warnings detected"
+        elif len(errors_summary["critical_issues"]) > 0:
+            errors_summary["priority"] = "critical"
+            errors_summary["message"] = f"{len(errors_summary['critical_issues'])} critical issues require immediate attention"
+        elif errors_summary["total_errors"] > 0:
+            errors_summary["priority"] = "high"
+            errors_summary["message"] = f"{errors_summary['total_errors']} errors need to be resolved"
+        else:
+            errors_summary["priority"] = "medium"
+            errors_summary["message"] = f"{errors_summary['total_warnings']} warnings should be addressed"
+
+        return errors_summary
+
+    except Exception as e:
+        logger.error(f"Error generating service errors summary: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Failed to generate service errors summary",
+                "message": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+
+
+@app.get("/debug/mcp-connection", tags=["Debug"])
+async def debug_mcp_connection():
+    """Debug MCP server connection and data access."""
+    debug_info = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "storage_direct": {
+            "total_emails": len(storage.email_storage),
+            "email_ids": list(storage.email_storage.keys()),
+            "stats": {
+                "total_processed": storage.stats.total_processed,
+                "total_errors": storage.stats.total_errors,
+                "avg_urgency_score": storage.stats.avg_urgency_score,
+            }
+        },
+        "mcp_server": {
+            "available": False,
+            "error": None,
+            "emails_via_mcp": 0
+        },
+        "api_endpoints": {
+            "recent_emails": "/api/emails/recent",
+            "mcp_stats": "/mcp/emails/stats",
+            "mcp_recent": "/mcp/emails/recent"
+        }
+    }
+
+    # Test MCP server availability
+    try:
+        # Try to import and test MCP server
+        from .server import server as mcp_server
+        debug_info["mcp_server"]["available"] = True
+        debug_info["mcp_server"]["name"] = mcp_server.name
+        debug_info["mcp_server"]["version"] = mcp_server.version
+
+        # Test MCP email access
+        try:
+            # This would test if MCP can access the same storage
+            mcp_emails = len(storage.email_storage)  # Direct access for now
+            debug_info["mcp_server"]["emails_via_mcp"] = mcp_emails
+        except Exception as e:
+            debug_info["mcp_server"]["error"] = f"MCP email access failed: {str(e)}"
+
+    except ImportError as e:
+        debug_info["mcp_server"]["error"] = f"MCP server import failed: {str(e)}"
+    except Exception as e:
+        debug_info["mcp_server"]["error"] = f"MCP server error: {str(e)}"
+
+    return debug_info
+
+
+@app.get("/debug/load-from-sqlite", tags=["Debug"])
+async def debug_load_from_sqlite():
+    """Load emails from SQLite database into memory storage."""
+    if not INTEGRATIONS_AVAILABLE:
+        return {"error": "Integrations not available"}
+
+    sqlite_db = integration_registry.get_database("sqlite")
+    if not sqlite_db:
+        return {"error": "SQLite database not configured"}
+
+    try:
+        # Try to load emails from SQLite
+        import aiosqlite
+        async with aiosqlite.connect(sqlite_db.db_path) as db:
+            cursor = await db.execute("SELECT * FROM emails ORDER BY created_at DESC LIMIT 10")
+            rows = await cursor.fetchall()
+
+            # Get column names
+            cursor = await db.execute("PRAGMA table_info(emails)")
+            columns_info = await cursor.fetchall()
+            column_names = [col[1] for col in columns_info]
+
+            loaded_emails = []
+            for row in rows:
+                email_dict = dict(zip(column_names, row))
+                loaded_emails.append({
+                    "id": email_dict.get("id"),
+                    "subject": email_dict.get("subject"),
+                    "from_email": email_dict.get("from_email"),
+                    "received_at": email_dict.get("received_at"),
+                    "urgency_score": email_dict.get("urgency_score")
+                })
+
+            return {
+                "sqlite_path": sqlite_db.db_path,
+                "emails_in_sqlite": len(rows),
+                "emails_in_memory": len(storage.email_storage),
+                "loaded_emails": loaded_emails,
+                "column_names": column_names
+            }
+
+    except ImportError:
+        return {"error": "aiosqlite not available"}
+    except Exception as e:
+        return {"error": f"Failed to load from SQLite: {str(e)}"}
+
+
+@app.get("/debug/sync-test", tags=["Debug"])
+async def debug_sync_test():
+    """Test synchronization between webhook storage and API storage."""
+    debug_info = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "webhook_storage": {
+            "total_emails": len(storage.email_storage),
+            "email_ids": list(storage.email_storage.keys()),
+            "storage_id": id(storage.email_storage),
+            "stats_id": id(storage.stats)
+        },
+        "api_storage": {
+            "total_emails": 0,
+            "email_ids": [],
+            "storage_id": None,
+            "stats_id": None
+        },
+        "sync_status": "unknown"
+    }
+
+    # Test API storage access
+    try:
+        from .api_routes import storage as api_storage
+        debug_info["api_storage"]["total_emails"] = len(api_storage.email_storage)
+        debug_info["api_storage"]["email_ids"] = list(api_storage.email_storage.keys())
+        debug_info["api_storage"]["storage_id"] = id(api_storage.email_storage)
+        debug_info["api_storage"]["stats_id"] = id(api_storage.stats)
+
+        # Check if they're the same instance
+        if id(storage.email_storage) == id(api_storage.email_storage):
+            debug_info["sync_status"] = "synchronized"
+        else:
+            debug_info["sync_status"] = "different_instances"
+
+    except Exception as e:
+        debug_info["api_storage"]["error"] = str(e)
+        debug_info["sync_status"] = "error"
+
+    return debug_info
+
+
+@app.get("/debug/storage", tags=["Debug"])
+async def debug_storage_status():
+    """Debug endpoint to check storage status and recent emails."""
+    try:
+        # Get storage statistics
+        storage_info = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "memory_storage": {
+                "total_emails": len(storage.email_storage),
+                "email_ids": list(storage.email_storage.keys()),
+                "stats": {
+                    "total_processed": storage.stats.total_processed,
+                    "total_errors": storage.stats.total_errors,
+                    "avg_urgency_score": storage.stats.avg_urgency_score,
+                    "processing_times_count": len(storage.stats.processing_times),
+                    "last_processed": storage.stats.last_processed.isoformat() if storage.stats.last_processed else None,
+                    "urgency_distribution": {k.value: v for k, v in storage.stats.urgency_distribution.items()} if storage.stats.urgency_distribution else {}
+                }
+            },
+            "recent_emails": []
+        }
+
+        # Get details of recent emails (last 5)
+        recent_emails = list(storage.email_storage.values())[-5:]
+        for email in recent_emails:
+            storage_info["recent_emails"].append({
+                "id": email.id,
+                "message_id": email.email_data.message_id,
+                "subject": email.email_data.subject,
+                "from": email.email_data.from_email,
+                "status": email.status.value if email.status else "unknown",
+                "processed_at": email.processed_at.isoformat() if email.processed_at else None,
+                "has_analysis": email.analysis is not None,
+                "urgency_level": email.analysis.urgency_level.value if email.analysis else None,
+                "inbound_email_address": email.email_data.inbound_email_address
+            })
+
+        return storage_info
+
+    except Exception as e:
+        logger.error(f"Error in debug storage endpoint: {e}")
+        return {
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+
+@app.post("/webhook/debug", tags=["Debug"])
+async def debug_webhook_signature(
+    request: Request,
+    x_postmark_signature: Optional[str] = Header(None)
+):
+    """Debug endpoint to see what signature Postmark sends"""
+    try:
+        body = await request.body()
+
+        debug_info = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "signature_received": x_postmark_signature,
+            "signature_length": len(x_postmark_signature) if x_postmark_signature else 0,
+            "body_preview": body[:200].decode('utf-8', errors='replace'),
+            "body_length": len(body),
+            "headers": dict(request.headers),
+            "configured_secret": config.postmark_webhook_secret[:10] + "..." if config.postmark_webhook_secret else None
+        }
+
+        logger.info(f"🔍 Debug webhook called - signature: {x_postmark_signature}")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "debug_success",
+                "message": "Webhook debug info captured",
+                "debug_info": debug_info
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Debug webhook error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+
+@app.post("/webhook/test", tags=["Debug"])
+async def handle_test_webhook(request: Request):
+    """Test webhook endpoint without signature verification for testing purposes."""
+    processing_start_time = time.time()
+    processing_id: Optional[str] = None
+    body: bytes = b""
+
+    try:
+        body = await request.body()
+        # Skip signature verification for testing
+        logger.info("🧪 Test webhook called - skipping signature verification")
+
+        payload_data = json.loads(body.decode("utf-8"))
+        webhook_payload = PostmarkWebhookPayload(**payload_data)
+
+        processing_id = str(uuid.uuid4())
+
+        email_data = extract_email_data(webhook_payload)
+
+        # Apply email routing based on inbound address
+        try:
+            from .email_routing import route_email_by_inbound_address
+            email_data = await route_email_by_inbound_address(email_data)
+            logger.info(f"Email routing applied for inbound address: {email_data.inbound_email_address}")
+        except ImportError:
+            logger.debug("Email routing module not available")
+        except Exception as e:
+            logger.warning(f"Email routing failed, continuing with normal processing: {e}")
+
+        logger.log_email_received(email_data, webhook_payload.model_dump())
+
+        logger.log_extraction_start(email_data)
+        extracted_metadata = email_extractor.extract_from_email(email_data)
+
+        urgency_score, urgency_level_str = email_extractor.calculate_urgency_score(
+            extracted_metadata.urgency_indicators
+        )
+        sentiment = _determine_sentiment(extracted_metadata.sentiment_indicators)
+        logger.log_extraction_complete(
+            email_data, extracted_metadata, urgency_score, sentiment
+        )
+
+        email_analysis = _create_email_analysis(
+            extracted_metadata, urgency_score, urgency_level_str, sentiment
+        )
+        processed_email = ProcessedEmail(
+            id=processing_id,
+            email_data=email_data,
+            analysis=email_analysis,
+            status=EmailStatus.ANALYZED,
+            processed_at=datetime.now(timezone.utc),
+            webhook_payload=payload_data,
+        )
+
+        # Store email in memory storage for MCP access
+        storage.email_storage[processing_id] = processed_email
+        logger.info(f"🧪 Test email {processing_id} stored in memory storage. Total emails: {len(storage.email_storage)}")
+
+        # Enhance email with plugins
+        processed_email = await _process_through_plugins(processed_email, processing_id)
+        storage.email_storage[processing_id] = processed_email
+        logger.info(f"🧪 Test email {processing_id} re-stored after plugin processing")
+
+        await _save_to_database(processed_email, processing_id)
+
+        processing_time_taken = time.time() - processing_start_time
+        _update_stats(processing_time_taken)
+        logger.log_email_processed(processed_email, processing_time_taken)
+
+        # Final verification that email is stored
+        if processing_id in storage.email_storage:
+            logger.info(f"✅ Test email {processing_id} successfully stored and accessible via MCP")
+        else:
+            logger.error(f"❌ Test email {processing_id} NOT found in storage after processing!")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "processing_id": processing_id,
+                "message": f"Test email {email_data.message_id} processed successfully.",
+                "test_mode": True
+            },
+        )
+
+    except Exception as e:
+        context_id = processing_id if processing_id else "N/A"
+        logger.log_processing_error(e, {"processing_id": context_id, "test_mode": True})
+        storage.stats.total_errors += 1
+        raise HTTPException(
+            status_code=500,
+            detail=f"Test webhook processing failed: {str(e)}",
+        )
+
+
+# --- Lightweight Service Health Check Functions ---
+
+def _check_sambanova_config_only() -> Dict[str, any]:
+    """Lightweight SambaNova check - configuration only, no imports."""
+    service_info = {
+        "name": "SambaNova AI",
+        "status": "healthy",
+        "configured": False,
+        "accessible": True,  # Assume accessible if configured
+        "missing_config": [],
+        "warnings": [],
+        "details": {
+            "mode": "config_only",
+            "environment_variables": {}
+        }
+    }
+
+    # Check environment variables only
+    sambanova_api_key = os.getenv("SAMBANOVA_API_KEY")
+    sambanova_model = os.getenv("SAMBANOVA_MODEL", "Meta-Llama-3.3-70B-Instruct")
+    sambanova_base_url = os.getenv("SAMBANOVA_BASE_URL", "https://api.sambanova.ai/v1")
+
+    service_info["details"]["environment_variables"] = {
+        "SAMBANOVA_API_KEY": {
+            "configured": bool(sambanova_api_key),
+            "length": len(sambanova_api_key) if sambanova_api_key else 0
+        },
+        "SAMBANOVA_MODEL": {
+            "configured": bool(sambanova_model),
+            "value": sambanova_model
+        },
+        "SAMBANOVA_BASE_URL": {
+            "configured": bool(sambanova_base_url),
+            "value": sambanova_base_url
+        }
+    }
+
+    if not sambanova_api_key:
+        service_info["missing_config"].append("SAMBANOVA_API_KEY")
+        service_info["status"] = "warning"
+        service_info["warnings"].append("API key not configured - AI features disabled")
+    else:
+        service_info["configured"] = True
+
+    return service_info
+
+
+def _check_supabase_config_only() -> Dict[str, any]:
+    """Lightweight Supabase check - configuration only, no imports."""
+    service_info = {
+        "name": "Supabase Database",
+        "status": "healthy",
+        "configured": False,
+        "accessible": True,  # Assume accessible if configured
+        "missing_config": [],
+        "warnings": [],
+        "details": {
+            "mode": "config_only",
+            "environment_variables": {}
+        }
+    }
+
+    # Check environment variables only
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_anon_key = (
+        os.getenv("SUPABASE_ANON_KEY") or
+        os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    )
+    supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+    service_info["details"]["environment_variables"] = {
+        "SUPABASE_URL": {
+            "configured": bool(supabase_url),
+            "valid_format": supabase_url.startswith("https://") if supabase_url else False
+        },
+        "SUPABASE_ANON_KEY": {
+            "configured": bool(supabase_anon_key),
+            "source": (
+                "SUPABASE_ANON_KEY" if os.getenv("SUPABASE_ANON_KEY")
+                else "NEXT_PUBLIC_SUPABASE_ANON_KEY" if supabase_anon_key
+                else None
+            )
+        },
+        "SUPABASE_SERVICE_ROLE_KEY": {
+            "configured": bool(supabase_service_key)
+        }
+    }
+
+    missing_vars = []
+    if not supabase_url:
+        missing_vars.append("SUPABASE_URL")
+    if not supabase_anon_key:
+        missing_vars.append("SUPABASE_ANON_KEY")
+
+    if missing_vars:
+        service_info["missing_config"] = missing_vars
+        service_info["status"] = "warning"
+        service_info["warnings"].append("Database not configured - using in-memory storage")
+    else:
+        service_info["configured"] = True
+
+    return service_info
+
+
+# --- Service Health Check Functions ---
+
+async def _check_sambanova_service(skip_connectivity_tests: bool = False) -> Dict[str, any]:
+    """Check SambaNova AI service configuration and connectivity."""
+    service_info = {
+        "name": "SambaNova AI",
+        "status": "healthy",
+        "configured": False,
+        "accessible": False,
+        "missing_config": [],
+        "warnings": [],
+        "errors": [],
+        "details": {
+            "last_check": datetime.now(timezone.utc).isoformat(),
+            "environment_variables": {},
+            "dependencies": {},
+            "plugin_status": {}
+        }
+    }
+
+    try:
+        # Check if SambaNova plugin is available
+        if not INTEGRATIONS_AVAILABLE:
+            service_info["status"] = "warning"
+            service_info["warnings"].append("Integration module not available")
+            return service_info
+
+        # Check environment variables
+        sambanova_api_key = os.getenv("SAMBANOVA_API_KEY")
+        sambanova_model = os.getenv("SAMBANOVA_MODEL", "sambanova-large")
+        sambanova_base_url = os.getenv(
+            "SAMBANOVA_BASE_URL",
+            "https://api.sambanova.com/v1"
+        )
+
+        # Detailed environment variable analysis
+        service_info["details"]["environment_variables"] = {
+            "SAMBANOVA_API_KEY": {
+                "configured": bool(sambanova_api_key),
+                "length": len(sambanova_api_key) if sambanova_api_key else 0,
+                "masked_value": (
+                    f"{sambanova_api_key[:8]}..."
+                    if sambanova_api_key and len(sambanova_api_key) > 8
+                    else None
+                )
+            },
+            "SAMBANOVA_MODEL": {
+                "configured": bool(sambanova_model),
+                "value": sambanova_model,
+                "is_default": sambanova_model == "sambanova-large"
+            },
+            "SAMBANOVA_BASE_URL": {
+                "configured": bool(sambanova_base_url),
+                "value": sambanova_base_url,
+                "is_default": sambanova_base_url == "https://api.sambanova.com/v1"
+            }
+        }
+
+        if not sambanova_api_key:
+            service_info["missing_config"].append("SAMBANOVA_API_KEY")
+            service_info["status"] = "warning"
+            service_info["warnings"].append(
+                "API key not configured - AI features disabled"
+            )
+            service_info["errors"].append({
+                "type": "configuration_error",
+                "field": "SAMBANOVA_API_KEY",
+                "message": "SambaNova API key not configured",
+                "impact": "AI analysis features will be disabled",
+                "resolution": "Set SAMBANOVA_API_KEY environment variable",
+                "documentation": "https://cloud.sambanova.ai/",
+                "priority": "medium"
+            })
+        else:
+            service_info["configured"] = True
+
+        # Check dependencies
+        dependencies = ["aiohttp", "openai"]
+        dependency_status = {}
+
+        for dep in dependencies:
+            try:
+                module = __import__(dep)
+                dependency_status[dep] = {
+                    "available": True,
+                    "version": getattr(module, "__version__", "unknown"),
+                    "error": None
+                }
+            except ImportError as e:
+                dependency_status[dep] = {
+                    "available": False,
+                    "version": None,
+                    "error": str(e)
+                }
+                service_info["errors"].append({
+                    "type": "dependency_error",
+                    "dependency": dep,
+                    "message": f"Required dependency '{dep}' not available",
+                    "error": str(e),
+                    "resolution": f"Install with: pip install {dep}",
+                    "priority": "high"
+                })
+
+        service_info["details"]["dependencies"] = dependency_status
+
+        # Try to import and test SambaNova plugin
+        plugin_status = {
+            "import_successful": False,
+            "initialization_successful": False,
+            "plugin_info": {},
+            "errors": []
+        }
+
+        try:
+            from .ai.plugin import SambaNovaPlugin
+            plugin_status["import_successful"] = True
+
+            try:
+                plugin = SambaNovaPlugin()
+                plugin_status["initialization_successful"] = True
+                plugin_status["plugin_info"] = {
+                    "name": plugin.get_name(),
+                    "version": plugin.get_version(),
+                    "initialized": True
+                }
+                service_info["details"]["plugin_available"] = True
+
+                # If API key is available, mark as accessible
+                if sambanova_api_key:
+                    service_info["accessible"] = True
+                    service_info["details"]["connectivity_test"] = "plugin_initialized"
+
+            except Exception as init_error:
+                plugin_status["errors"].append({
+                    "type": "initialization_error",
+                    "message": str(init_error),
+                    "error_type": type(init_error).__name__
+                })
+                service_info["errors"].append({
+                    "type": "plugin_initialization_error",
+                    "message": "SambaNova plugin failed to initialize",
+                    "error": str(init_error),
+                    "resolution": "Check API key and dependencies",
+                    "priority": "medium"
+                })
+
+        except ImportError as e:
+            plugin_status["errors"].append({
+                "type": "import_error",
+                "message": str(e),
+                "missing_module": ".ai.plugin"
+            })
+            service_info["status"] = "warning"
+            service_info["warnings"].append(
+                f"SambaNova plugin import failed: {str(e)}"
+            )
+            service_info["errors"].append({
+                "type": "import_error",
+                "message": "SambaNova plugin module could not be imported",
+                "error": str(e),
+                "resolution": "Check if ai.plugin module exists and dependencies are installed",
+                "missing_dependencies": [
+                    dep for dep, status in dependency_status.items()
+                    if not status["available"]
+                ],
+                "priority": "high"
+            })
+
+        service_info["details"]["plugin_status"] = plugin_status
+
+    except Exception as e:
+        service_info["status"] = "error"
+        error_msg = str(e) if str(e) else f"Unknown {type(e).__name__} error"
+        service_info["warnings"].append(f"Unexpected error checking SambaNova: {error_msg}")
+        service_info["errors"].append({
+            "type": "unexpected_error",
+            "message": f"SambaNova service check failed: {error_msg}",
+            "error_type": type(e).__name__,
+            "resolution": "Check application logs and environment configuration",
+            "priority": "medium"
+        })
+
+    return service_info
+
+
+async def _check_supabase_service(skip_connectivity_tests: bool = False) -> Dict[str, any]:
+    """Check Supabase database configuration and connectivity."""
+    service_info = {
+        "name": "Supabase Database",
+        "status": "healthy",
+        "configured": False,
+        "accessible": False,
+        "missing_config": [],
+        "warnings": [],
+        "errors": [],
+        "details": {
+            "last_check": datetime.now(timezone.utc).isoformat(),
+            "environment_variables": {},
+            "connectivity_tests": [],
+            "client_info": {}
+        }
+    }
+
+    try:
+        # Check environment variables
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_anon_key = (
+            os.getenv("SUPABASE_ANON_KEY") or
+            os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+        )
+        supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+        # Detailed environment variable analysis
+        service_info["details"]["environment_variables"] = {
+            "SUPABASE_URL": {
+                "configured": bool(supabase_url),
+                "value": supabase_url[:50] + "..." if supabase_url and len(supabase_url) > 50 else supabase_url,
+                "valid_format": supabase_url.startswith("https://") if supabase_url else False
+            },
+            "SUPABASE_ANON_KEY": {
+                "configured": bool(supabase_anon_key),
+                "source": (
+                    "SUPABASE_ANON_KEY" if os.getenv("SUPABASE_ANON_KEY")
+                    else "NEXT_PUBLIC_SUPABASE_ANON_KEY" if supabase_anon_key
+                    else None
+                ),
+                "length": len(supabase_anon_key) if supabase_anon_key else 0,
+                "masked_value": (
+                    f"{supabase_anon_key[:20]}..."
+                    if supabase_anon_key and len(supabase_anon_key) > 20
+                    else None
+                )
+            },
+            "SUPABASE_SERVICE_ROLE_KEY": {
+                "configured": bool(supabase_service_key),
+                "length": len(supabase_service_key) if supabase_service_key else 0,
+                "masked_value": (
+                    f"{supabase_service_key[:20]}..."
+                    if supabase_service_key and len(supabase_service_key) > 20
+                    else None
+                )
+            }
+        }
+
+        missing_vars = []
+        if not supabase_url:
+            missing_vars.append("SUPABASE_URL")
+            service_info["errors"].append({
+                "type": "configuration_error",
+                "field": "SUPABASE_URL",
+                "message": "Supabase project URL not configured",
+                "impact": "Database features will use in-memory storage",
+                "resolution": "Set SUPABASE_URL environment variable",
+                "example": "https://your-project.supabase.co",
+                "priority": "medium"
+            })
+        if not supabase_anon_key:
+            missing_vars.append("SUPABASE_ANON_KEY")
+            service_info["errors"].append({
+                "type": "configuration_error",
+                "field": "SUPABASE_ANON_KEY",
+                "message": "Supabase anonymous key not configured",
+                "impact": "Database connection will fail",
+                "resolution": "Set SUPABASE_ANON_KEY environment variable",
+                "documentation": "Found in Supabase Dashboard → Settings → API",
+                "priority": "high"
+            })
+
+        if missing_vars:
+            service_info["missing_config"] = missing_vars
+            service_info["status"] = "warning"
+            service_info["warnings"].append(
+                "Database not configured - using in-memory storage"
+            )
+        else:
+            service_info["configured"] = True
+
+            # Skip connectivity tests if requested (useful for serverless environments)
+            if skip_connectivity_tests:
+                service_info["details"]["connectivity_test"] = "skipped_by_request"
+                service_info["accessible"] = True  # Assume accessible if configured
+                return service_info
+
+            # Try to test Supabase connectivity
+            try:
+                # Import supabase client with memory-safe approach
+                try:
+                    from supabase import create_client
+                    service_info["details"]["supabase_import"] = "success"
+                except MemoryError:
+                    service_info["status"] = "warning"
+                    service_info["warnings"].append("Supabase client import failed due to memory constraints")
+                    service_info["errors"].append({
+                        "type": "memory_error",
+                        "message": "Insufficient memory to load Supabase client",
+                        "resolution": "This is normal in serverless environments. Database features will use fallback storage.",
+                        "priority": "low"
+                    })
+                    return service_info
+                except ImportError as import_err:
+                    service_info["status"] = "warning"
+                    service_info["warnings"].append("Supabase client library not available")
+                    service_info["errors"].append({
+                        "type": "dependency_error",
+                        "message": "Supabase Python client not installed",
+                        "resolution": "Install with: pip install supabase",
+                        "priority": "medium"
+                    })
+                    return service_info
+
+                service_info["details"]["url_format"] = (
+                    supabase_url[:50] + "..." if len(supabase_url) > 50 else supabase_url
+                )
+                service_info["details"]["anon_key_length"] = len(supabase_anon_key)
+                service_info["details"]["anon_key_source"] = (
+                    "SUPABASE_ANON_KEY" if os.getenv("SUPABASE_ANON_KEY")
+                    else "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+                )
+
+                supabase_client = create_client(supabase_url, supabase_anon_key)
+                service_info["details"]["client_created"] = True
+
+                # Try a simple API call to test connectivity
+                try:
+                    # Test with a simple query that should work on any Supabase project
+                    supabase_client.table("_supabase_migrations").select("*").limit(1).execute()
+                    service_info["accessible"] = True
+                    service_info["details"]["connectivity_test"] = "api_call_successful"
+                except Exception as api_error:
+                    # If migrations table doesn't exist, try auth endpoint
+                    try:
+                        # Test auth endpoint which should always exist
+                        supabase_client.auth.get_session()
+                        service_info["accessible"] = True
+                        service_info["details"]["connectivity_test"] = "auth_endpoint_accessible"
+                    except Exception as auth_error:
+                        service_info["accessible"] = False
+                        service_info["details"]["connectivity_test"] = "failed"
+                        service_info["details"]["api_error"] = str(api_error)[:100]
+                        service_info["details"]["auth_error"] = str(auth_error)[:100]
+
+            except ImportError:
+                service_info["status"] = "warning"
+                service_info["warnings"].append("Supabase client library not available")
+                service_info["details"]["client_created"] = False
+            except Exception as e:
+                service_info["status"] = "warning"
+                error_msg = str(e) if str(e) else f"Unknown {type(e).__name__} error"
+                service_info["warnings"].append(f"Supabase connection test failed: {error_msg}")
+                service_info["details"]["connectivity_error"] = error_msg
+                service_info["details"]["error_type"] = type(e).__name__
+                service_info["errors"].append({
+                    "type": "connectivity_error",
+                    "message": f"Failed to connect to Supabase: {error_msg}",
+                    "resolution": "Check SUPABASE_URL and SUPABASE_ANON_KEY values",
+                    "priority": "high"
+                })
+
+    except Exception as e:
+        service_info["status"] = "error"
+        service_info["warnings"].append(f"Unexpected error checking Supabase: {str(e)}")
+
+    return service_info
+
+
+def _check_postmark_config() -> Dict[str, any]:
+    """Check Postmark webhook configuration."""
+    service_info = {
+        "name": "Postmark Webhook",
+        "status": "healthy",
+        "configured": False,
+        "accessible": True,  # Always accessible as it's just config
+        "missing_config": [],
+        "warnings": [],
+        "details": {}
+    }
+
+    try:
+        webhook_secret = config.postmark_webhook_secret
+
+        if not webhook_secret:
+            service_info["missing_config"].append("POSTMARK_WEBHOOK_SECRET")
+            service_info["status"] = "warning"
+            service_info["warnings"].append("Webhook signature verification disabled - security risk")
+            service_info["details"]["signature_verification"] = False
+        else:
+            service_info["configured"] = True
+            service_info["details"]["signature_verification"] = True
+            service_info["details"]["secret_length"] = len(webhook_secret)
+
+        service_info["details"]["webhook_endpoint"] = config.webhook_endpoint
+        service_info["details"]["environment"] = os.getenv("ENVIRONMENT", "development")
+
+    except Exception as e:
+        service_info["status"] = "error"
+        service_info["warnings"].append(f"Error checking Postmark config: {str(e)}")
+
+    return service_info
+
+
+def _check_environment_config() -> Dict[str, any]:
+    """Check general environment configuration."""
+    env_info = {
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "log_level": os.getenv("LOG_LEVEL", "INFO"),
+        "log_format": os.getenv("LOG_FORMAT", "text"),
+        "vercel_deployment": bool(os.getenv("VERCEL")),
+        "deployment_id": os.getenv("VERCEL_DEPLOYMENT_ID", "local"),
+        "python_path": os.getenv("PYTHONPATH", "not_set"),
+        "serverless_optimizations": SERVERLESS_ENV,
+        "integrations_available": INTEGRATIONS_AVAILABLE
+    }
+
+    return env_info
 
 
 # --- API Routes Integration ---

@@ -127,14 +127,102 @@ vercel env add ENVIRONMENT production
 
 **Available endpoints after deployment:**
 
-- `POST /webhook` - Postmark webhook receiver
-- `GET /health` - Health check
+- `POST /webhook` - Postmark webhook receiver with inbound email routing
+- `GET /health` - Basic health check
+- `GET /health/services` - **NEW!** Comprehensive services health check
 - `GET /mcp/health` - MCP server health
+- `GET /mcp/health/services` - **NEW!** MCP services health check
 - `GET /mcp/resources` - List MCP resources
 - `POST /mcp/tools/call` - Call MCP tools
 - `GET /api/stats` - Processing statistics
+- `GET /api/routing/stats` - **NEW!** Email routing statistics
+- `GET /api/routing/rules` - **NEW!** Email routing rules
+- `GET /api/emails/by-inbound-address` - **NEW!** Filter emails by inbound address
 
 See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md) for detailed deployment guide.
+
+## 🏥 Health Monitoring
+
+### Services Health Check
+
+Monitor all external services and configurations:
+
+```bash
+# Check overall health
+curl https://your-app.vercel.app/health/services
+
+# Quick status check
+curl https://your-app.vercel.app/health/services | jq '.overall_status'
+
+# Check specific service
+curl https://your-app.vercel.app/health/services | jq '.services.sambanova.status'
+
+# Get missing configuration
+curl https://your-app.vercel.app/health/services | jq '.missing_config[]'
+```
+
+**Monitored Services:**
+- 🤖 **SambaNova AI**: API configuration and plugin availability
+- 💾 **Supabase Database**: Connection and credentials
+- 📧 **Postmark Webhook**: Signature verification setup
+- ⚙️ **Environment**: Deployment and runtime configuration
+
+**Status Levels:**
+- ✅ `healthy` - All services configured and working
+- ⚠️ `warning` - Some services missing config but app functional
+- 🔴 `degraded` - Critical services have errors
+- ❌ `error` - Major system errors
+
+📖 **See [Health Services API Documentation](docs/HEALTH_SERVICES_API.md) for complete details.**
+
+### Quick Configuration Fix
+
+If your health check shows warnings, use our automated configuration script:
+
+```bash
+# Configure all environment variables
+./configure-vercel-env.sh
+
+# Redeploy with new configuration
+vercel --prod
+
+# Verify all services are healthy
+curl https://your-app.vercel.app/health/services | jq '.overall_status'
+```
+
+🔧 **See [Troubleshooting Guide](docs/TROUBLESHOOTING_HEALTH_SERVICES.md) for specific issue resolution.**
+
+## 📧 Inbound Email Routing
+
+### Postmark MailboxHash Support
+
+Full support for Postmark's `inbound_email_address` (MailboxHash) with intelligent routing:
+
+```bash
+# Check routing statistics
+curl https://your-app.vercel.app/api/routing/stats
+
+# View routing rules
+curl https://your-app.vercel.app/api/routing/rules
+
+# Get emails by inbound address
+curl "https://your-app.vercel.app/api/emails/by-inbound-address?inbound_address=support-hash"
+```
+
+**Automatic Routing Rules:**
+- 🎯 **Support emails** (`support`, `help`, `contact`) → Priority processing
+- 💼 **Sales emails** (`sales`, `info`, `hello`) → Sales team routing
+- 💰 **Billing emails** (`billing`, `invoices`, `payments`) → Finance team
+- 📁 **No-reply emails** (`noreply`, `donotreply`) → Auto-archive
+
+**Features:**
+- ✅ Pattern matching (exact, contains, regex)
+- ✅ Priority-based rule processing
+- ✅ Custom routing actions and metadata
+- ✅ Team assignment and SLA tracking
+- ✅ Real-time routing analytics
+
+📖 **See [Inbound Email Address Documentation](docs/INBOUND_EMAIL_ADDRESS_SUPPORT.md) for complete details.**
 
 ### Docker Deployment
 

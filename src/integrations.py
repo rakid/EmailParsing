@@ -192,21 +192,86 @@ class SQLiteInterface(DatabaseInterface):
     def __init__(self):
         self.connection = None
         self.db_path = None
+        self._initialized = False
 
     async def connect(self, connection_string: str) -> None:
         """Connect to SQLite database"""
-        # Implementation would use aiosqlite
-        self.db_path = connection_string
+        self.db_path = connection_string or "/tmp/emails.db"
+        await self._initialize_database()
+
+    async def _initialize_database(self) -> None:
+        """Initialize SQLite database with required tables"""
+        if self._initialized:
+            return
+
+        try:
+            import aiosqlite
+            async with aiosqlite.connect(self.db_path) as db:
+                # Create emails table
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS emails (
+                        id TEXT PRIMARY KEY,
+                        message_id TEXT UNIQUE,
+                        from_email TEXT,
+                        to_emails TEXT,
+                        subject TEXT,
+                        text_body TEXT,
+                        html_body TEXT,
+                        received_at TEXT,
+                        processed_at TEXT,
+                        status TEXT,
+                        urgency_score INTEGER,
+                        urgency_level TEXT,
+                        sentiment TEXT,
+                        keywords TEXT,
+                        action_items TEXT,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                await db.commit()
+                self._initialized = True
+        except ImportError:
+            # Fallback to in-memory storage if aiosqlite not available
+            pass
 
     async def store_email(self, email: ProcessedEmail) -> str:
         """Store email in SQLite"""
-        # Convert to database format and insert
-        DatabaseFormat.from_processed_email(email)
-        # Implementation would execute SQL INSERT
-        # async with aiosqlite.connect(self.db_path) as db:
-        #     await db.execute("INSERT INTO emails (...) VALUES (...)", ...)
-        #     await db.commit()
-        return email.id
+        try:
+            import aiosqlite
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("""
+                    INSERT OR REPLACE INTO emails (
+                        id, message_id, from_email, to_emails, subject,
+                        text_body, html_body, received_at, processed_at,
+                        status, urgency_score, urgency_level, sentiment,
+                        keywords, action_items
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    email.id,
+                    email.email_data.message_id,
+                    email.email_data.from_email,
+                    ",".join(email.email_data.to_emails),
+                    email.email_data.subject,
+                    email.email_data.text_body,
+                    email.email_data.html_body,
+                    email.email_data.received_at.isoformat(),
+                    email.processed_at.isoformat() if email.processed_at else None,
+                    email.status.value if email.status else "unknown",
+                    email.analysis.urgency_score if email.analysis else 0,
+                    email.analysis.urgency_level.value if email.analysis else "low",
+                    email.analysis.sentiment if email.analysis else "neutral",
+                    ",".join(email.analysis.keywords) if email.analysis else "",
+                    ",".join(email.analysis.action_items) if email.analysis else ""
+                ))
+                await db.commit()
+                return email.id
+        except ImportError:
+            # Fallback: just return ID if aiosqlite not available
+            return email.id
+        except Exception as e:
+            # Log error but don't fail the whole process
+            print(f"SQLite storage error: {e}")
+            return email.id
 
     async def get_email(self, email_id: str) -> Optional[ProcessedEmail]:
         """Retrieve email from SQLite"""

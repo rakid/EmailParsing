@@ -16,7 +16,21 @@
       }
     },
     {
+      "src": "/health/services",
+      "dest": "/api/index.py",
+      "headers": {
+        "X-Vercel-Protection-Bypass": "health-check"
+      }
+    },
+    {
       "src": "/api/health",
+      "dest": "/api/index.py",
+      "headers": {
+        "X-Vercel-Protection-Bypass": "health-check"
+      }
+    },
+    {
+      "src": "/api/health/services",
       "dest": "/api/index.py",
       "headers": {
         "X-Vercel-Protection-Bypass": "health-check"

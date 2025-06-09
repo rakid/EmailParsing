@@ -110,7 +110,9 @@ if [ ! -z "$DEPLOYMENT_URL" ]; then
     echo
     print_status "Useful URLs:"
     echo "   - Health check: https://$DEPLOYMENT_URL/health"
+    echo "   - Services health: https://$DEPLOYMENT_URL/health/services"
     echo "   - MCP health: https://$DEPLOYMENT_URL/mcp/health"
+    echo "   - MCP services health: https://$DEPLOYMENT_URL/mcp/health/services"
     echo "   - Email stats: https://$DEPLOYMENT_URL/mcp/emails/stats"
     echo "   - Webhook endpoint: https://$DEPLOYMENT_URL/webhook"
     

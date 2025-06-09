@@ -55,11 +55,81 @@ class MCPPromptRequest(BaseModel):
 @app.get("/mcp/health")
 async def mcp_health():
     """Health check for MCP server"""
+    from datetime import datetime, timezone
     return {
         "status": "healthy" if MCP_AVAILABLE else "degraded",
         "mcp_available": MCP_AVAILABLE,
-        "timestamp": "2025-01-28T10:00:00Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/mcp/health/services")
+async def mcp_services_health():
+    """Comprehensive health check for all services via MCP API"""
+    from datetime import datetime, timezone
+
+    try:
+        # Import the health check functions from webhook
+        from src.webhook import (
+            _check_sambanova_service,
+            _check_supabase_service,
+            _check_postmark_config,
+            _check_environment_config
+        )
+
+        health_status = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "overall_status": "healthy",
+            "services": {},
+            "configuration": {},
+            "missing_config": [],
+            "warnings": [],
+            "source": "mcp_api",
+            "mcp_available": MCP_AVAILABLE
+        }
+
+        # Check all services
+        health_status["services"]["sambanova"] = await _check_sambanova_service()
+        health_status["services"]["supabase"] = await _check_supabase_service()
+        health_status["services"]["postmark"] = _check_postmark_config()
+        health_status["configuration"] = _check_environment_config()
+
+        # Collect missing configurations and warnings
+        for service_name, service_info in health_status["services"].items():
+            if service_info.get("missing_config"):
+                health_status["missing_config"].extend([
+                    f"{service_name}.{key}" for key in service_info["missing_config"]
+                ])
+            if service_info.get("warnings"):
+                health_status["warnings"].extend([
+                    f"{service_name}: {warning}" for warning in service_info["warnings"]
+                ])
+
+        # Determine overall status
+        service_statuses = [s["status"] for s in health_status["services"].values()]
+        if "error" in service_statuses:
+            health_status["overall_status"] = "degraded"
+        elif "warning" in service_statuses:
+            health_status["overall_status"] = "warning"
+
+        # Factor in MCP availability
+        if not MCP_AVAILABLE and health_status["overall_status"] == "healthy":
+            health_status["overall_status"] = "warning"
+            health_status["warnings"].append("MCP server not available")
+
+        return health_status
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "overall_status": "error",
+                "error": f"Failed to check services health: {str(e)}",
+                "source": "mcp_api",
+                "mcp_available": MCP_AVAILABLE
+            }
+        )
 
 
 @app.get("/mcp/resources")
@@ -239,6 +309,7 @@ async def not_found_handler(request, exc):
             "error": "Endpoint not found",
             "available_endpoints": [
                 "/mcp/health",
+                "/mcp/health/services",
                 "/mcp/resources",
                 "/mcp/resources/read",
                 "/mcp/tools",
