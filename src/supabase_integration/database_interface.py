@@ -204,6 +204,9 @@ class SupabaseDatabaseInterface(DatabaseInterface):
             # Prepare email data for Supabase
             email_data = self._processed_email_to_supabase(email)
 
+            # Debug: Print email data being sent
+            print(f"🔍 Sending to Supabase: {json.dumps(email_data, indent=2, default=str)}")
+
             # Store the main email record
             email_response = (
                 self.client.table(self.config.TABLES["emails"])
