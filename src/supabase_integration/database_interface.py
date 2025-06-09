@@ -80,7 +80,7 @@ class SupabaseDatabaseInterface(DatabaseInterface):
 
     def _create_http_client(self):
         """Create a simple HTTP-based client to avoid memory issues."""
-        import requests
+        import httpx
 
         class SimpleSupabaseClient:
             def __init__(self, url, key):
@@ -103,11 +103,13 @@ class SupabaseDatabaseInterface(DatabaseInterface):
             def upsert(self, data, on_conflict=None):
                 headers = self.headers.copy()
                 if on_conflict:
-                    headers['Prefer'] = f'resolution=merge-duplicates,return=representation'
+                    prefer_header = 'resolution=merge-duplicates,return=representation'
+                    headers['Prefer'] = prefer_header
 
-                response = requests.post(self.url, json=data, headers=headers, timeout=30)
-                response.raise_for_status()
-                return SimpleResponse(response.json())
+                with httpx.Client(timeout=30.0) as client:
+                    response = client.post(self.url, json=data, headers=headers)
+                    response.raise_for_status()
+                    return SimpleResponse(response.json())
 
             def select(self, columns="*"):
                 return SimpleQuery(self.url, self.headers, columns)
@@ -124,9 +126,10 @@ class SupabaseDatabaseInterface(DatabaseInterface):
                 return self
 
             def execute(self):
-                response = requests.get(self.url, params=self.params, headers=self.headers, timeout=30)
-                response.raise_for_status()
-                return SimpleResponse(response.json())
+                with httpx.Client(timeout=30.0) as client:
+                    response = client.get(self.url, params=self.params, headers=self.headers)
+                    response.raise_for_status()
+                    return SimpleResponse(response.json())
 
         class SimpleResponse:
             def __init__(self, data):
