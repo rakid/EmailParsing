@@ -105,9 +105,9 @@ async def startup_event():
             has_url = os.getenv("SUPABASE_URL")
             has_key = os.getenv("SUPABASE_ANON_KEY")
             if supabase_db and has_url and has_key:
-                # Just mark as ready for lazy loading (don't create client yet)
-                await supabase_db.connect("")  # This now just validates config
-                logger.info("Supabase database configured for lazy loading")
+                # Connect and mark as ready
+                await supabase_db.connect("")  # Validates config and connects
+                logger.info("Supabase database configured and connected")
             else:
                 logger.warning("Supabase not configured - missing URL or API key")
         except Exception as e:
@@ -1503,7 +1503,7 @@ async def debug_supabase_connect():
 
 @app.get("/debug/supabase-emails", tags=["Debug"])
 async def debug_supabase_emails():
-    """Check emails stored in Supabase database."""
+    """Check emails stored in Supabase database using ultra-light client."""
     if not INTEGRATIONS_AVAILABLE:
         return {"error": "Integrations not available"}
 
@@ -1512,8 +1512,13 @@ async def debug_supabase_emails():
         return {"error": "Supabase database not configured"}
 
     try:
-        # Try to query emails directly from Supabase
-        response = supabase_db.client.table("emails").select("*").limit(10).execute()
+        # Ensure client is initialized
+        supabase_db._ensure_client()
+
+        # Query emails using ultra-light client
+        table = supabase_db.client.table("emails")
+        query = table.select("*").limit(10)
+        response = query.execute()
 
         default_user_id = "00000000-0000-0000-0000-000000000000"
         return {
@@ -1521,15 +1526,18 @@ async def debug_supabase_emails():
             "supabase_emails": {
                 "count": len(response.data),
                 "emails": response.data,
-                "user_id_used": supabase_db.current_user_id or default_user_id
+                "user_id_used": supabase_db.current_user_id or default_user_id,
+                "client_type": str(type(supabase_db.client))
             }
         }
 
     except Exception as e:
+        import traceback
         default_user_id = "00000000-0000-0000-0000-000000000000"
         return {
             "error": f"Failed to query Supabase: {str(e)}",
-            "user_id_used": supabase_db.current_user_id or default_user_id
+            "user_id_used": supabase_db.current_user_id or default_user_id,
+            "traceback": traceback.format_exc()
         }
 
 
