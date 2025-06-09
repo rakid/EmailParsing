@@ -6,6 +6,7 @@ database capabilities with Row Level Security (RLS), real-time features, and
 seamless integration with the existing plugin architecture.
 """
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
