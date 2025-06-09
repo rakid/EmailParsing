@@ -643,9 +643,38 @@ class SupabaseDatabaseInterface(DatabaseInterface):
     # Private helper methods
 
     def _processed_email_to_supabase(self, email: ProcessedEmail) -> Dict[str, Any]:
-        """Convert ProcessedEmail to Supabase format."""
+        """Convert ProcessedEmail to Supabase format matching the exact table schema."""
         # Use default user ID if none set (for webhook processing)
         user_id = self.current_user_id or "00000000-0000-0000-0000-000000000000"
+
+        # Convert headers list to dict for JSONB storage
+        headers_dict = {}
+        if email.email_data.headers:
+            if isinstance(email.email_data.headers, list):
+                for header in email.email_data.headers:
+                    if hasattr(header, 'name') and hasattr(header, 'value'):
+                        headers_dict[header.name] = header.value
+            elif isinstance(email.email_data.headers, dict):
+                headers_dict = email.email_data.headers
+
+        # Extract analysis data if available
+        urgency_score = None
+        urgency_level = None
+        sentiment = None
+        sentiment_score = None
+        confidence = None
+        keywords = []
+
+        if email.analysis:
+            urgency_score = email.analysis.urgency_score
+            urgency_level = (
+                email.analysis.urgency_level.value
+                if hasattr(email.analysis.urgency_level, 'value')
+                else str(email.analysis.urgency_level)
+            )
+            sentiment = email.analysis.sentiment
+            confidence = email.analysis.confidence
+            keywords = email.analysis.keywords or []
 
         return {
             "id": email.id,
@@ -659,17 +688,18 @@ class SupabaseDatabaseInterface(DatabaseInterface):
             "text_body": email.email_data.text_body,
             "html_body": email.email_data.html_body,
             "received_at": email.email_data.received_at.isoformat(),
-            "headers": email.email_data.headers,
+            "headers": headers_dict,
+            "urgency_score": urgency_score,
+            "urgency_level": urgency_level,
+            "sentiment": sentiment,
+            "sentiment_score": sentiment_score,
+            "confidence": confidence,
+            "keywords": keywords,
             "status": (
                 email.status.value if hasattr(email.status, "value") else email.status
             ),
-            "processed_at": (
-                email.processed_at.isoformat() if email.processed_at else None
-            ),
             "error_message": email.error_message,
-            "webhook_payload": email.webhook_payload,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            # Note: removed processed_at and webhook_payload as they don't exist in table
         }
 
     def _analysis_to_supabase(
