@@ -71,16 +71,68 @@ class SupabaseDatabaseInterface(DatabaseInterface):
                 raise RuntimeError("Supabase URL and API key are required")
 
             try:
-                self.client = create_client(
-                    self.config.supabase_url, self.config.supabase_key
-                )
-            except MemoryError:
+                # Try to use lightweight HTTP client first
+                self.client = self._create_http_client()
+            except Exception as e:
                 # Fallback: mark as unavailable and use SQLite instead
                 self._connected = False
-                raise RuntimeError("Supabase client creation failed due to memory constraints")
-            except Exception as e:
-                self._connected = False
-                raise RuntimeError(f"Failed to create Supabase client: {str(e)}") from e
+                raise RuntimeError(f"Supabase client creation failed due to memory constraints: {str(e)}") from e
+
+    def _create_http_client(self):
+        """Create a simple HTTP-based client to avoid memory issues."""
+        import requests
+
+        class SimpleSupabaseClient:
+            def __init__(self, url, key):
+                self.base_url = url.rstrip('/') + '/rest/v1/'
+                self.headers = {
+                    'apikey': key,
+                    'Authorization': f'Bearer {key}',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                }
+
+            def table(self, table_name):
+                return SimpleTable(self.base_url + table_name, self.headers)
+
+        class SimpleTable:
+            def __init__(self, url, headers):
+                self.url = url
+                self.headers = headers
+
+            def upsert(self, data, on_conflict=None):
+                headers = self.headers.copy()
+                if on_conflict:
+                    headers['Prefer'] = f'resolution=merge-duplicates,return=representation'
+
+                response = requests.post(self.url, json=data, headers=headers, timeout=30)
+                response.raise_for_status()
+                return SimpleResponse(response.json())
+
+            def select(self, columns="*"):
+                return SimpleQuery(self.url, self.headers, columns)
+
+        class SimpleQuery:
+            def __init__(self, url, headers, columns):
+                self.url = url
+                self.headers = headers
+                self.columns = columns
+                self.params = {'select': columns}
+
+            def limit(self, count):
+                self.params['limit'] = count
+                return self
+
+            def execute(self):
+                response = requests.get(self.url, params=self.params, headers=self.headers, timeout=30)
+                response.raise_for_status()
+                return SimpleResponse(response.json())
+
+        class SimpleResponse:
+            def __init__(self, data):
+                self.data = data if isinstance(data, list) else [data] if data else []
+
+        return SimpleSupabaseClient(self.config.supabase_url, self.config.supabase_key)
 
     async def store_email(self, email: ProcessedEmail) -> str:
         """
