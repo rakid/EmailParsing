@@ -79,10 +79,13 @@ class SupabaseDatabaseInterface(DatabaseInterface):
                 raise RuntimeError(f"Supabase client creation failed due to memory constraints: {str(e)}") from e
 
     def _create_http_client(self):
-        """Create a simple HTTP-based client to avoid memory issues."""
-        import httpx
+        """Create an ultra-lightweight HTTP client using urllib."""
+        import json
+        import urllib.request
+        import urllib.parse
+        import urllib.error
 
-        class SimpleSupabaseClient:
+        class UltraLightSupabaseClient:
             def __init__(self, url, key):
                 self.base_url = url.rstrip('/') + '/rest/v1/'
                 self.headers = {
@@ -93,9 +96,9 @@ class SupabaseDatabaseInterface(DatabaseInterface):
                 }
 
             def table(self, table_name):
-                return SimpleTable(self.base_url + table_name, self.headers)
+                return UltraLightTable(self.base_url + table_name, self.headers)
 
-        class SimpleTable:
+        class UltraLightTable:
             def __init__(self, url, headers):
                 self.url = url
                 self.headers = headers
@@ -103,18 +106,30 @@ class SupabaseDatabaseInterface(DatabaseInterface):
             def upsert(self, data, on_conflict=None):
                 headers = self.headers.copy()
                 if on_conflict:
-                    prefer_header = 'resolution=merge-duplicates,return=representation'
-                    headers['Prefer'] = prefer_header
+                    headers['Prefer'] = 'resolution=merge-duplicates,return=representation'
 
-                with httpx.Client(timeout=30.0) as client:
-                    response = client.post(self.url, json=data, headers=headers)
-                    response.raise_for_status()
-                    return SimpleResponse(response.json())
+                # Use urllib instead of httpx
+                data_bytes = json.dumps(data).encode('utf-8')
+                req = urllib.request.Request(
+                    self.url,
+                    data=data_bytes,
+                    headers=headers,
+                    method='POST'
+                )
+
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        result = json.loads(response.read().decode('utf-8'))
+                        return UltraLightResponse(result)
+                except urllib.error.HTTPError as e:
+                    if e.code == 409:  # Conflict - already exists
+                        return UltraLightResponse([])
+                    raise RuntimeError(f"HTTP {e.code}: {e.reason}")
 
             def select(self, columns="*"):
-                return SimpleQuery(self.url, self.headers, columns)
+                return UltraLightQuery(self.url, self.headers, columns)
 
-        class SimpleQuery:
+        class UltraLightQuery:
             def __init__(self, url, headers, columns):
                 self.url = url
                 self.headers = headers
@@ -126,16 +141,24 @@ class SupabaseDatabaseInterface(DatabaseInterface):
                 return self
 
             def execute(self):
-                with httpx.Client(timeout=30.0) as client:
-                    response = client.get(self.url, params=self.params, headers=self.headers)
-                    response.raise_for_status()
-                    return SimpleResponse(response.json())
+                # Build URL with query parameters
+                query_string = urllib.parse.urlencode(self.params)
+                full_url = f"{self.url}?{query_string}"
 
-        class SimpleResponse:
+                req = urllib.request.Request(full_url, headers=self.headers)
+
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        result = json.loads(response.read().decode('utf-8'))
+                        return UltraLightResponse(result)
+                except urllib.error.HTTPError as e:
+                    raise RuntimeError(f"HTTP {e.code}: {e.reason}")
+
+        class UltraLightResponse:
             def __init__(self, data):
                 self.data = data if isinstance(data, list) else [data] if data else []
 
-        return SimpleSupabaseClient(self.config.supabase_url, self.config.supabase_key)
+        return UltraLightSupabaseClient(self.config.supabase_url, self.config.supabase_key)
 
     async def store_email(self, email: ProcessedEmail) -> str:
         """

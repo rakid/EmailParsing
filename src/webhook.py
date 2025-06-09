@@ -1183,6 +1183,68 @@ async def debug_supabase_detailed():
     return result
 
 
+@app.get("/debug/supabase-ultra-test", tags=["Debug"])
+async def debug_supabase_ultra_test():
+    """Test ultra-lightweight Supabase client."""
+    if not INTEGRATIONS_AVAILABLE:
+        return {"error": "Integrations not available"}
+
+    supabase_db = integration_registry.get_database("supabase")
+    if not supabase_db:
+        return {"error": "Supabase database not registered"}
+
+    result = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ultra_client_test": {
+            "interface_available": True,
+            "connected": supabase_db._connected,
+            "client_exists": supabase_db.client is not None,
+            "config_valid": supabase_db.config.is_configured()
+        },
+        "client_creation_test": {
+            "attempted": False,
+            "success": False,
+            "error": None
+        },
+        "table_test": {
+            "attempted": False,
+            "success": False,
+            "error": None,
+            "response_data": None
+        }
+    }
+
+    # Test ultra-light client creation
+    try:
+        result["client_creation_test"]["attempted"] = True
+        supabase_db._ensure_client()
+        result["client_creation_test"]["success"] = True
+        result["ultra_client_test"]["client_exists"] = supabase_db.client is not None
+
+        # Test table access with ultra-light client
+        if supabase_db.client:
+            result["table_test"]["attempted"] = True
+            table = supabase_db.client.table("emails")
+            query = table.select("id").limit(1)
+            response = query.execute()
+            result["table_test"]["success"] = True
+            result["table_test"]["response_data"] = response.data
+            result["table_test"]["response_length"] = len(response.data)
+
+    except Exception as e:
+        import traceback
+        if not result["client_creation_test"]["success"]:
+            result["client_creation_test"]["error"] = str(e)
+            result["client_creation_test"]["error_type"] = type(e).__name__
+            result["client_creation_test"]["traceback"] = traceback.format_exc()
+        else:
+            result["table_test"]["error"] = str(e)
+            result["table_test"]["error_type"] = type(e).__name__
+            result["table_test"]["traceback"] = traceback.format_exc()
+
+    return result
+
+
 @app.get("/debug/supabase-http-test", tags=["Debug"])
 async def debug_supabase_http_test():
     """Test Supabase HTTP client approach."""
