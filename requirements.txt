@@ -89,7 +89,7 @@ setuptools==80.9.0
 shellingham==1.5.4
 six==1.17.0
 sniffio==1.3.1
-sse-starlette==2.3.5
+sse-starlette==2.3.6
 starlette==0.46.2
 stevedore==5.4.1
 storage3==0.11.3
