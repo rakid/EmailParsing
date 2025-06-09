@@ -84,6 +84,7 @@ class SupabaseDatabaseInterface(DatabaseInterface):
         import urllib.request
         import urllib.parse
         import urllib.error
+        import ssl
 
         class UltraLightSupabaseClient:
             def __init__(self, url, key):
@@ -118,7 +119,12 @@ class SupabaseDatabaseInterface(DatabaseInterface):
                 )
 
                 try:
-                    with urllib.request.urlopen(req, timeout=30) as response:
+                    # Create SSL context that doesn't verify certificates (for Vercel)
+                    ssl_context = ssl.create_default_context()
+                    ssl_context.check_hostname = False
+                    ssl_context.verify_mode = ssl.CERT_NONE
+
+                    with urllib.request.urlopen(req, timeout=30, context=ssl_context) as response:
                         result = json.loads(response.read().decode('utf-8'))
                         return UltraLightResponse(result)
                 except urllib.error.HTTPError as e:
@@ -148,7 +154,12 @@ class SupabaseDatabaseInterface(DatabaseInterface):
                 req = urllib.request.Request(full_url, headers=self.headers)
 
                 try:
-                    with urllib.request.urlopen(req, timeout=30) as response:
+                    # Create SSL context that doesn't verify certificates (for Vercel)
+                    ssl_context = ssl.create_default_context()
+                    ssl_context.check_hostname = False
+                    ssl_context.verify_mode = ssl.CERT_NONE
+
+                    with urllib.request.urlopen(req, timeout=30, context=ssl_context) as response:
                         result = json.loads(response.read().decode('utf-8'))
                         return UltraLightResponse(result)
                 except urllib.error.HTTPError as e:
