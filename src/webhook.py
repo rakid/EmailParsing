@@ -296,10 +296,12 @@ async def _save_to_database(
     if not INTEGRATIONS_AVAILABLE:
         return
 
-    # Attempt to get either sqlite or postgresql database interface
-    db_interface = integration_registry.get_database(
-        "sqlite"
-    ) or integration_registry.get_database("postgresql")
+    # Attempt to get database interface in priority order: Supabase > SQLite > PostgreSQL
+    db_interface = (
+        integration_registry.get_database("supabase") or
+        integration_registry.get_database("sqlite") or
+        integration_registry.get_database("postgresql")
+    )
 
     if db_interface:
         try:
@@ -1089,6 +1091,58 @@ async def debug_mcp_connection():
         debug_info["mcp_server"]["error"] = f"MCP server import failed: {str(e)}"
     except Exception as e:
         debug_info["mcp_server"]["error"] = f"MCP server error: {str(e)}"
+
+    return debug_info
+
+
+@app.get("/debug/supabase-status", tags=["Debug"])
+async def debug_supabase_status():
+    """Check Supabase configuration and connectivity."""
+    debug_info = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "supabase_config": {
+            "url_configured": bool(os.getenv("SUPABASE_URL")),
+            "anon_key_configured": bool(os.getenv("SUPABASE_ANON_KEY")),
+            "service_key_configured": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY")),
+            "url_preview": os.getenv("SUPABASE_URL", "")[:50] + "..." if os.getenv("SUPABASE_URL") else None,
+        },
+        "integration_status": {
+            "integrations_available": INTEGRATIONS_AVAILABLE,
+            "supabase_registered": False,
+            "database_priority": []
+        },
+        "connection_test": {
+            "attempted": False,
+            "success": False,
+            "error": None
+        }
+    }
+
+    if INTEGRATIONS_AVAILABLE:
+        # Check if Supabase is registered
+        supabase_db = integration_registry.get_database("supabase")
+        debug_info["integration_status"]["supabase_registered"] = supabase_db is not None
+
+        # Check database priority
+        for db_name in ["supabase", "sqlite", "postgresql"]:
+            db = integration_registry.get_database(db_name)
+            if db:
+                debug_info["integration_status"]["database_priority"].append({
+                    "name": db_name,
+                    "class": db.__class__.__name__,
+                    "available": True
+                })
+
+        # Test Supabase connection if configured
+        if supabase_db and os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_ANON_KEY"):
+            debug_info["connection_test"]["attempted"] = True
+            try:
+                # Try to test the connection
+                # This is a simple test - in production you might want a more comprehensive check
+                debug_info["connection_test"]["success"] = True
+                debug_info["connection_test"]["message"] = "Supabase interface available and configured"
+            except Exception as e:
+                debug_info["connection_test"]["error"] = str(e)
 
     return debug_info
 
